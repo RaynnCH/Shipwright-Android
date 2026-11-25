@@ -64,7 +64,7 @@ public class MainActivity extends SDLActivity{
     private volatile boolean mIsAiming = false;
     private static final int COPY_BUFFER_SIZE = 65536;
     private static final int RUMBLE_MAX_DURATION_MS = 5000;
-    private static final String DATA_FOLDER_NAME = BuildConfig.DEBUG ? "SOH93-Test" : "SOH";
+    private static final String DATA_FOLDER_NAME = "SOHR";
     private static String currentDataRootPath = "/storage/emulated/0/" + DATA_FOLDER_NAME;
     private static final String PREF_DATA_ROOT_PATH = "dataRootPath";
     private static final String PREF_LEGACY_DATA_MIGRATION_COMPLETE = "legacyDataMigrationComplete";
