@@ -4,7 +4,7 @@ name: Android Build
 # keystore that is generated once and cached, so later builds can be installed over earlier ones.
 on:
   push:
-    branches: [main]
+    branches: [main, "build/**"]
   workflow_dispatch:
 
 concurrency:

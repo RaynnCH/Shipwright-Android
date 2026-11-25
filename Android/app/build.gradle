@@ -122,6 +122,15 @@ tasks.register("verifyLibultrashipAndroidSupport") {
         if (!contextFile.text.contains("sAndroidDataRootPath")) {
             throw new GradleException("The Android data-root support is missing from libultraship.")
         }
+
+        def glBackendFile = file("${libultrashipDir}/src/fast/backends/gfx_opengl.cpp")
+        if (!glBackendFile.text.contains("gfx_program_cache.h")) {
+            exec {
+                workingDir libultrashipDir
+                commandLine "git", "apply", "--ignore-whitespace", "--whitespace=nowarn",
+                        "../patches/libultraship-android-shader-cache.patch"
+            }
+        }
     }
 }
 

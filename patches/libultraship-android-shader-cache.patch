@@ -1,0 +1,199 @@
+diff --git a/src/fast/backends/gfx_opengl.cpp b/src/fast/backends/gfx_opengl.cpp
+index c0746d3..6af0b3b 100644
+--- a/src/fast/backends/gfx_opengl.cpp
++++ b/src/fast/backends/gfx_opengl.cpp
+@@ -26,6 +26,7 @@
+ #include "ship/resource/factory/ShaderFactory.h"
+ #include "fast/interpreter.h"
+ #include "ship/config/ConsoleVariable.h"
++#include "fast/backends/gfx_program_cache.h"
+ 
+ namespace Fast {
+ int GfxRenderingAPIOGL::GetMaxTextureSize() {
+@@ -389,6 +390,10 @@ ShaderProgram* GfxRenderingAPIOGL::CreateAndLoadNewShader(uint64_t shader_id0, u
+     const GLint lengths[2] = { (GLint)vs_buf.size(), (GLint)fs_buf.size() };
+     GLint success;
+ 
++#ifdef __ANDROID__
++    GLuint shader_program = GfxProgramCache::Load(vs_buf, fs_buf);
++    if (shader_program == 0) {
++#endif
+     GLuint vertex_shader = glCreateShader(GL_VERTEX_SHADER);
+     glShaderSource(vertex_shader, 1, &sources[0], &lengths[0]);
+     glCompileShader(vertex_shader);
+@@ -417,10 +422,23 @@ ShaderProgram* GfxRenderingAPIOGL::CreateAndLoadNewShader(uint64_t shader_id0, u
+         abort();
+     }
+ 
++#ifdef __ANDROID__
++    shader_program = glCreateProgram();
++    glProgramParameteri(shader_program, GL_PROGRAM_BINARY_RETRIEVABLE_HINT, GL_TRUE);
++#else
+     GLuint shader_program = glCreateProgram();
++#endif
+     glAttachShader(shader_program, vertex_shader);
+     glAttachShader(shader_program, fragment_shader);
+     glLinkProgram(shader_program);
++#ifdef __ANDROID__
++    glDetachShader(shader_program, vertex_shader);
++    glDetachShader(shader_program, fragment_shader);
++    glDeleteShader(vertex_shader);
++    glDeleteShader(fragment_shader);
++    GfxProgramCache::Store(shader_program, vs_buf, fs_buf);
++    }
++#endif
+ 
+     size_t cnt = 0;
+ 
+diff --git a/src/fast/backends/gfx_program_cache.h b/src/fast/backends/gfx_program_cache.h
+new file mode 100644
+index 0000000..64c737f
+--- /dev/null
++++ b/src/fast/backends/gfx_program_cache.h
+@@ -0,0 +1,146 @@
++// On-disk cache of linked GLES programs (glGetProgramBinary / glProgramBinary), Android only.
++// Fast3D builds a new GLSL program the first time each combiner is drawn, synchronously on the render thread.
++// On mobile GPUs that is a multi-millisecond hitch per shader. Once a program is cached, later launches
++// only pay for a binary load.
++#pragma once
++
++#ifdef __ANDROID__
++#include <SDL2/SDL.h>
++#include <cstdint>
++#include <cstdio>
++#include <cstdlib>
++#include <cstring>
++#include <string>
++#include <sys/stat.h>
++#include <unistd.h>
++#include <vector>
++
++namespace GfxProgramCache {
++
++inline uint64_t Fnv1a(uint64_t h, const char* data, size_t len) {
++    for (size_t i = 0; i < len; i++) {
++        h ^= (uint8_t)data[i];
++        h *= 1099511628211ULL;
++    }
++    return h;
++}
++
++inline const std::string& Directory() {
++    static std::string dir;
++    static bool init = false;
++    if (!init) {
++        init = true;
++        // App-private storage: program binaries are driver specific and must not outlive a driver update
++        // unnoticed (the key below also contains GL_RENDERER / GL_VERSION).
++        const char* base = SDL_AndroidGetInternalStoragePath();
++        if (base != nullptr && base[0] != '\0') {
++            dir = std::string(base) + "/shader_cache";
++            mkdir(dir.c_str(), 0755);
++        }
++    }
++    return dir;
++}
++
++template <typename S> inline std::string PathFor(const S& vs, const S& fs) {
++    const std::string& dir = Directory();
++    if (dir.empty()) {
++        return {};
++    }
++    uint64_t h = 1469598103934665603ULL;
++    const char* r = (const char*)glGetString(GL_RENDERER);
++    const char* v = (const char*)glGetString(GL_VERSION);
++    if (r) h = Fnv1a(h, r, strlen(r));
++    if (v) h = Fnv1a(h, v, strlen(v));
++    h = Fnv1a(h, vs.data(), vs.size());
++    h = Fnv1a(h, "|", 1);
++    h = Fnv1a(h, fs.data(), fs.size());
++    char name[40];
++    snprintf(name, sizeof(name), "/%016llx.bin", (unsigned long long)h);
++    return dir + name;
++}
++
++inline bool Supported() {
++    GLint formats = 0;
++    glGetIntegerv(GL_NUM_PROGRAM_BINARY_FORMATS, &formats);
++    return formats > 0;
++}
++
++// Returns a linked program, or 0 when there is no usable cache entry.
++template <typename S> inline GLuint Load(const S& vs, const S& fs) {
++    if (!Supported()) {
++        return 0;
++    }
++    const std::string path = PathFor(vs, fs);
++    if (path.empty()) {
++        return 0;
++    }
++    FILE* f = fopen(path.c_str(), "rb");
++    if (f == nullptr) {
++        return 0;
++    }
++    uint32_t fmt = 0;
++    uint32_t len = 0;
++    std::vector<char> bin;
++    bool ok = fread(&fmt, 4, 1, f) == 1 && fread(&len, 4, 1, f) == 1 && len > 0 && len < (64u << 20);
++    if (ok) {
++        bin.resize(len);
++        ok = fread(bin.data(), 1, len, f) == len;
++    }
++    fclose(f);
++    if (!ok) {
++        remove(path.c_str());
++        return 0;
++    }
++    GLuint prog = glCreateProgram();
++    glProgramBinary(prog, (GLenum)fmt, bin.data(), (GLsizei)len);
++    GLint linked = 0;
++    glGetProgramiv(prog, GL_LINK_STATUS, &linked);
++    if (!linked) {
++        glDeleteProgram(prog);
++        remove(path.c_str());
++        return 0;
++    }
++    return prog;
++}
++
++template <typename S> inline void Store(GLuint prog, const S& vs, const S& fs) {
++    GLint linked = 0;
++    glGetProgramiv(prog, GL_LINK_STATUS, &linked);
++    if (!linked || !Supported()) {
++        return;
++    }
++    const std::string path = PathFor(vs, fs);
++    if (path.empty()) {
++        return;
++    }
++    GLint len = 0;
++    glGetProgramiv(prog, GL_PROGRAM_BINARY_LENGTH, &len);
++    if (len <= 0) {
++        return;
++    }
++    std::vector<char> bin(len);
++    GLenum fmt = 0;
++    GLsizei written = 0;
++    glGetProgramBinary(prog, len, &written, &fmt, bin.data());
++    if (written <= 0) {
++        return;
++    }
++    const std::string tmp = path + ".tmp";
++    FILE* f = fopen(tmp.c_str(), "wb");
++    if (f == nullptr) {
++        return;
++    }
++    uint32_t hdrFmt = (uint32_t)fmt;
++    uint32_t hdrLen = (uint32_t)written;
++    bool ok = fwrite(&hdrFmt, 4, 1, f) == 1 && fwrite(&hdrLen, 4, 1, f) == 1 &&
++              fwrite(bin.data(), 1, written, f) == (size_t)written;
++    fclose(f);
++    if (ok) {
++        rename(tmp.c_str(), path.c_str());
++    } else {
++        remove(tmp.c_str());
++    }
++}
++
++} // namespace GfxProgramCache
++#endif
