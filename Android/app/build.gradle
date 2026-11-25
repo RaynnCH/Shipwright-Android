@@ -18,7 +18,7 @@ android {
     }
     defaultConfig {
         if (buildAsApplication) {
-            applicationId project.findProperty('sohApplicationId') ?: "com.linkzenic.soh"
+            applicationId project.findProperty('sohApplicationId') ?: "com.raynnch.soh"
         }
         minSdkVersion 24
         targetSdkVersion 33
