@@ -56,9 +56,9 @@ jobs:
           "$SDKM" "ndk;26.0.10792818" "cmake;3.31.5" "platforms;android-31" "build-tools;35.0.0"
       - name: Generate soh.o2r
         run: |
-          cmake -S . -B build-linux -G Ninja -DCMAKE_BUILD_TYPE=Release
-          cmake --build build-linux --target GenerateSohOtr --parallel
-          cp build-linux/soh/soh.o2r Android/app/src/main/assets/soh.o2r
+          cmake -S . -B build-host-tools -G Ninja -DSOH_TOOLS_ONLY=ON -DCMAKE_BUILD_TYPE=Release
+          cmake --build build-host-tools --target GenerateSohOtr --parallel
+          test -s build-host-tools/soh/soh.o2r
 
       - name: Restore signing keystore
         id: keystore-cache
