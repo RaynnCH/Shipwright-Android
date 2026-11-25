@@ -27,7 +27,7 @@ jobs:
 
       - name: Write local.properties
         run: |
-          echo "sdk.dir=${ANDROID_SDK_ROOT}" > Android/local.properties
+          printf "sdk.dir=%s\ncmake.dir=%s/cmake/3.31.5\n" "${ANDROID_SDK_ROOT}" "${ANDROID_SDK_ROOT}" > Android/local.properties
           echo "ndk.dir=${ANDROID_NDK_HOME}" >> Android/local.properties
 
       - name: Cache Gradle
@@ -49,6 +49,11 @@ jobs:
           git -C libultraship apply --ignore-space-change ../CMake/patches/libultraship-android.patch
           git -C libultraship apply --ignore-space-change ../CMake/patches/libultraship-powervr.patch
           git -C libultraship apply --ignore-space-change ../CMake/patches/libultraship-android-fullscreen.patch
+      - name: Install Android toolchain
+        run: |
+          SDKM=$(command -v sdkmanager || echo "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager")
+          yes | "$SDKM" --licenses >/dev/null 2>&1 || true
+          "$SDKM" "ndk;26.0.10792818" "cmake;3.31.5" "platforms;android-31" "build-tools;35.0.0"
       - name: Generate soh.o2r
         run: |
           cmake -S . -B build-linux -G Ninja -DCMAKE_BUILD_TYPE=Release
