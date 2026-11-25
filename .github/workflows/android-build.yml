@@ -44,6 +44,11 @@ jobs:
           apt-get update
           apt-get install -y $(cat .github/workflows/apt-deps.txt)
 
+      - name: Apply Android engine support
+        run: |
+          git -C libultraship apply --ignore-space-change ../CMake/patches/libultraship-android.patch
+          git -C libultraship apply --ignore-space-change ../CMake/patches/libultraship-powervr.patch
+          git -C libultraship apply --ignore-space-change ../CMake/patches/libultraship-android-fullscreen.patch
       - name: Generate soh.o2r
         run: |
           cmake -S . -B build-linux -G Ninja -DCMAKE_BUILD_TYPE=Release
