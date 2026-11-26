@@ -5,6 +5,7 @@
 #include <fast/Fast3dGui.h>
 #include <imgui.h>
 #include <cmath>
+#include <cstdlib>
 #include <cstdio>
 #include <memory>
 #include <vector>
@@ -22,7 +23,6 @@ extern OcarinaNote sOcarinaSongNotes[OCARINA_SONG_MAX][20];
 extern PlayState* gPlayState;
 // Definida em code_800EC960.c mas não declarada nos headers (marcada como "Unused" no jogo)
 void AudioOcarina_EnableInput(u8 inputEnabled);
-void AudioOcarina_ForcePlaySong(s8 songId);
 // Acessores adicionados em code_800EC960.c
 u8 AudioOcarina_IsActive(void);
 u8 AudioOcarina_IsInputEnabled(void);
@@ -123,8 +123,6 @@ std::vector<BtnNote> GetSongButtons(int songId) {
 bool sOpen = false;
 bool sSavedInputEnabled = false;
 bool sMelodyStarted = false;
-bool sTapped = false;       // a learned song was tapped/clicked this frame
-bool sOpenRequested = false; // the on-screen hint was tapped
 int sSel = 0;
 int sPrevButtons = 0;
 int sPrevStickDir = 0;
@@ -425,7 +423,7 @@ void DrawClef(ImDrawList* dl, float left, float staffTop, float gap) {
 void DrawOpenHint() {
     ImGuiViewport* vp = ImGui::GetMainViewport();
     ImDrawList* dl = ImGui::GetForegroundDrawList();
-    const char* text = "D-Pad Down / Tap here: Song Menu";
+    const char* text = "D-Pad Down: Song Menu";
     ImVec2 ts = ImGui::CalcTextSize(text);
     const float padX = 16.0f, padY = 8.0f;
     float cx = vp->Pos.x + vp->Size.x * 0.5f;
@@ -435,12 +433,6 @@ void DrawOpenHint() {
     dl->AddRectFilled(pMin, pMax, IM_COL32(0, 0, 0, 150), 12.0f);
     dl->AddRect(pMin, pMax, IM_COL32(255, 255, 255, 120), 12.0f, 0, 1.5f);
     dl->AddText(ImVec2(cx - ts.x * 0.5f, y), IM_COL32_WHITE, text);
-    if (ImGui::IsMouseClicked(0)) {
-        const ImVec2 m = ImGui::GetIO().MousePos;
-        if (m.x >= pMin.x && m.x <= pMax.x && m.y >= pMin.y && m.y <= pMax.y) {
-            sOpenRequested = true;
-        }
-    }
 }
 
 void DrawMenu() {
@@ -478,7 +470,6 @@ void DrawMenu() {
             float dx = io.MousePos.x - c.x, dy = io.MousePos.y - c.y;
             if (dx * dx + dy * dy <= r * r) {
                 sSel = i;
-                sTapped = learned;
             }
         }
     }
@@ -523,7 +514,7 @@ void DrawMenu() {
     }
 
     // ---- Dicas de botão ----
-    const char* hint = "Tap a song: select and listen      D-Pad Left/Right: select      Z: listen      D-Pad Down: close";
+    const char* hint = "D-Pad Left/Right: select      Z: listen to the melody      D-Pad Down: close";
     ImVec2 hsz = ImGui::CalcTextSize(hint);
     dl->AddText(ImVec2((pMin.x + pMax.x - hsz.x) * 0.5f, pMax.y + 10), IM_COL32_WHITE, hint);
 }
@@ -547,7 +538,16 @@ void OcarinaSongMenuWindow::DrawElement() {
     int stickDir = 0;
     if (pads != nullptr) {
         cur = pads[0].button;
-        stickDir = (pads[0].stick_x > 40) - (pads[0].stick_x < -40);
+        // Touch buttons (Android touch HUD) are merged into the game's input in padmgr.c, not into the control
+        // deck pads, so read the game's merged input as well. Same bit layout as the pads.
+        if (gPlayState != nullptr) {
+            cur |= gPlayState->state.input[0].cur.button;
+        }
+        int stickX = pads[0].stick_x;
+        if (gPlayState != nullptr && std::abs(gPlayState->state.input[0].cur.stick_x) > std::abs(stickX)) {
+            stickX = gPlayState->state.input[0].cur.stick_x;
+        }
+        stickDir = (stickX > 40) - (stickX < -40);
     }
     int pressed = cur & ~sPrevButtons;
     int stickPressed = (stickDir != 0 && stickDir != sPrevStickDir) ? stickDir : 0;
@@ -583,14 +583,13 @@ void OcarinaSongMenuWindow::DrawElement() {
         return;
     }
 
-    if ((pressed & kBtnToggle) || (!sOpen && sOpenRequested)) {
+    if (pressed & kBtnToggle) {
         if (sOpen) {
             CloseMenu();
         } else {
             OpenMenu();
         }
     }
-    sOpenRequested = false;
     if (!sOpen) {
         DrawOpenHint();
         return;
@@ -606,17 +605,5 @@ void OcarinaSongMenuWindow::DrawElement() {
         PlaySelectedMelody();
     }
 
-    sTapped = false;
     DrawMenu();
-    // Tapping/clicking a learned song selects it and immediately plays its melody, no notes to enter.
-    if (sTapped && IsSongLearned(kSongs[sSel])) {
-        if (CVarGetInteger(CVAR_ENHANCEMENT("OcarinaSongMenuInstantCast"), 0) != 0) {
-            // Optional: also performs the song, as if the notes had been played correctly.
-            const int songId = kSongs[sSel].songId;
-            CloseMenu();
-            AudioOcarina_ForcePlaySong((s8)songId);
-            return;
-        }
-        PlaySelectedMelody();
-    }
 }

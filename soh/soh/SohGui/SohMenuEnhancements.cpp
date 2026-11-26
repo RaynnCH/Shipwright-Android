@@ -2215,14 +2215,8 @@ void SohMenu::AddMenuEnhancements() {
         .CVar(CVAR_ENHANCEMENT("OcarinaSongMenu"))
         .RaceDisable(false)
         .Options(CheckboxOptions().DefaultValue(true).Tooltip(
-            "While the ocarina is out, tap the 'Song Menu' button (or press D-Pad Down) to open every ocarina "
-            "song with its notes. Tapping a learned song selects it and plays its melody right away."));
-    AddWidget(path, "Cast Song When Tapped", WIDGET_CVAR_CHECKBOX)
-        .CVar(CVAR_ENHANCEMENT("OcarinaSongMenuInstantCast"))
-        .RaceDisable(false)
-        .Options(CheckboxOptions().Tooltip(
-            "Tapping a learned song in the Song Menu performs it for you, as if you had played the notes "
-            "correctly. Off: it only plays the melody so you can learn it."));
+            "While the ocarina is out, press D-Pad Down (on-screen D-Pad works too) to open a menu with every "
+            "ocarina song, its notes on a music staff, and a button to listen to the melody."));
 
     // Time Splits
     path.sidebarName = "Time Splits";
