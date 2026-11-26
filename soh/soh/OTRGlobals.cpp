@@ -33,6 +33,10 @@ static int sAimingGraceFrames = 0;
 #include <ship/resource/File.h>
 #include <ship/window/Window.h>
 #include <soh/GameVersions.h>
+#ifdef __ANDROID__
+#include "soh/Android/AdaptiveResolution.h"
+#include <cmath>
+#endif
 
 #include "Enhancements/gameconsole.h"
 #ifdef _WIN32
@@ -1936,6 +1940,33 @@ extern "C" void Graph_StartFrame() {
 #endif
 }
 
+#ifdef __ANDROID__
+namespace {
+SohAndroid::AdaptiveResolutionController gAdaptiveResolutionController;
+
+void UpdateAndroidAdaptiveResolution() {
+    auto window = Ship::Context::GetRawInstance()->GetWindow();
+    const uint32_t targetFps = OTRGlobals::Instance->GetInterpolationFPS();
+    const float configuredScale = CVarGetFloat(CVAR_INTERNAL_RESOLUTION, 1.0f);
+    const bool enabled = CVarGetInteger(CVAR_SETTING("AdaptiveResolution"), 1) &&
+                         !CVarGetInteger(CVAR_PREFIX_ADVANCED_RESOLUTION ".Enabled", 0) &&
+                         !CVarGetInteger(CVAR_LOW_RES_MODE, 0) && !GfxDebuggerIsDebugging();
+    const int sceneId = gPlayState != nullptr ? gPlayState->sceneNum : -1;
+    const float effectiveScale = gAdaptiveResolutionController.Update(configuredScale, ImGui::GetIO().DeltaTime,
+                                                                      targetFps, enabled, sceneId);
+    static float sAppliedScale = -1.0f;
+    if (std::fabs(effectiveScale - sAppliedScale) > 0.0001f) {
+        if (sAppliedScale >= 0.0f || std::fabs(effectiveScale - configuredScale) > 0.0001f) {
+            window->SetResolutionMultiplier(effectiveScale);
+            SPDLOG_INFO("Android adaptive internal resolution: {:.0f}% ({} FPS target)", effectiveScale * 100.0f,
+                        targetFps);
+        }
+        sAppliedScale = effectiveScale;
+    }
+}
+} // namespace
+#endif
+
 // Interpolated frames of a tick are evenly spaced numerators time+step, time+2*step, ... over denom.
 void RunCommands(Gfx* Commands, int time, int step, int denom, int count) {
     auto wnd = std::dynamic_pointer_cast<Fast::Fast3dWindow>(OTRGlobals::Instance->context->GetWindow());
@@ -1958,7 +1989,14 @@ void RunCommands(Gfx* Commands, int time, int step, int denom, int count) {
         std::unordered_map<Mtx*, MtxF> mtx_replacements =
             (time == denom) ? std::unordered_map<Mtx*, MtxF>() : FrameInterpolation_Interpolate((float)time / denom);
         intp->mInterpolationT = (float)time / denom;
-        wnd->DrawAndRunGraphicsCommands(Commands, mtx_replacements);
+        const bool rendered = wnd->DrawAndRunGraphicsCommands(Commands, mtx_replacements);
+#ifdef __ANDROID__
+        if (rendered) {
+            UpdateAndroidAdaptiveResolution();
+        }
+#else
+        (void)rendered;
+#endif
         intp->mInterpolationIndex++;
     }
     ImGui::PopStyleColor();

@@ -197,8 +197,12 @@ set_property(GLOBAL PROPERTY USE_FOLDERS ON)
 # Set LUS vars
 ################################################################################
 
-# Enable the Gfx debugger in LUS, which fetches its own libgfxd
-set(GFX_DEBUG_DISASSEMBLER ON)
+# Enable the Gfx debugger in LUS, which fetches its own libgfxd (desktop-only developer tool)
+if(ANDROID)
+    set(GFX_DEBUG_DISASSEMBLER OFF)
+else()
+    set(GFX_DEBUG_DISASSEMBLER ON)
+endif()
 
 # Tell LUS we're using F3DEX_GBI_2 (in a way that doesn't break libgfxd)
 set(GBI_UCODE F3DEX_GBI_2)

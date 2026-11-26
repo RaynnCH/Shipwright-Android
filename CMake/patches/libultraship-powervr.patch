@@ -1,20 +1,49 @@
+diff --git a/src/fast/backends/gfx_opengl.cpp b/src/fast/backends/gfx_opengl.cpp
+index ad9b1dd..dd38a83 100644
+--- a/src/fast/backends/gfx_opengl.cpp
++++ b/src/fast/backends/gfx_opengl.cpp
+@@ -5,6 +5,7 @@
+ #include <stdbool.h>
+ #include <stdio.h>
+ 
++#include <cstring>
+ #include <map>
+ #include <unordered_map>
+ 
+@@ -236,10 +237,20 @@ std::optional<std::string> opengl_include_fs(const std::string& path) {
+     return *inc;
+ }
+ 
++// PowerVR GPUs mis-render the mod()-based colour wrap emulation, so only they get the clamp() fallback.
++static bool IsPowerVRRenderer() {
++    static const bool sIsPowerVR = [] {
++        const char* renderer = reinterpret_cast<const char*>(glGetString(GL_RENDERER));
++        return renderer != nullptr && strstr(renderer, "PowerVR") != nullptr;
++    }();
++    return sIsPowerVR;
++}
++
+ std::string GfxRenderingAPIOGL::BuildFsShader(const CCFeatures& cc_features) {
+     prism::Processor processor;
+     prism::ContextItems mContext = {
+         { "VERTEX_SHADER", false },
++        { "powervr_wrap_fix", IsPowerVRRenderer() },
+         { "o_c", M_ARRAY(cc_features.c, int, 2, 2, 4) },
+         { "o_alpha", cc_features.opt_alpha },
+         { "o_fog", cc_features.opt_fog },
 diff --git a/src/fast/shaders/opengl/default.shader.glsl b/src/fast/shaders/opengl/default.shader.glsl
-index 1fe86aa8..d6c6073b 100644
+index 1fe86aa..b67bfa7 100644
 --- a/src/fast/shaders/opengl/default.shader.glsl
 +++ b/src/fast/shaders/opengl/default.shader.glsl
-@@ -130,7 +130,7 @@
+@@ -130,7 +130,11 @@
      uniform int texture_filtering[2];
  
      #define TEX_OFFSET(off) @{texture}(tex, texCoord - off / texSize)
--    #define WRAP(x, low, high) mod((x)-(low), (high)-(low)) + (low)
++    @if(powervr_wrap_fix)
 +    #define WRAP(x, low, high) clamp((x), (low), (high))
++    @else
+     #define WRAP(x, low, high) mod((x)-(low), (high)-(low)) + (low)
++    @end
  
      float random(in vec3 value) {
          float random = dot(sin(value), vec3(12.9898, 78.233, 37.719));
-@@ -294,4 +294,4 @@
-             gl_FragDepth = prim_depth;
-         @end
-     }
--@end
-\ No newline at end of file
-+@end

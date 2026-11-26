@@ -33,12 +33,4 @@ void BootCommands_Init() {
         CVarGetInteger(CVAR_SETTING("TouchControls.FloatingRightStick"),1),
         CVarGetInteger(CVAR_SETTING("TouchControls.TransparentSticks"),0));
 #endif
-#if defined(__ANDROID__)
-    // Start at 720 lines for performance; aspect follows screen. Only registered when unset.
-    CVarRegisterInteger("gAdvancedResolution.Enabled", 1);
-    CVarRegisterInteger("gAdvancedResolution.VerticalResolutionToggle", 1);
-    CVarRegisterInteger("gAdvancedResolution.VerticalPixelCount", 720);
-    CVarRegisterFloat("gAdvancedResolution.AspectRatioX", 0.0f);
-    CVarRegisterFloat("gAdvancedResolution.AspectRatioY", 0.0f);
-#endif
 }

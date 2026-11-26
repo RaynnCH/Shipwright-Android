@@ -689,6 +689,15 @@ void SohMenu::AddMenuSettings() {
                 .Min(0.5f)
                 .Max(2.0f));
 #ifndef __WIIU__
+#ifdef __ANDROID__
+    AddWidget(path, "Adaptive Internal Resolution", WIDGET_CVAR_CHECKBOX)
+        .CVar(CVAR_SETTING("AdaptiveResolution"))
+        .RaceDisable(false)
+        .Options(CheckboxOptions().DefaultValue(true).Tooltip(
+            "Lowers the render resolution only after sustained missed refresh intervals, and keeps the lower "
+            "scale only when it measurably improves frame time. Your configured Internal Resolution is restored "
+            "when you change scene. Needs a 30+ FPS target and is disabled while Advanced Resolution is on."));
+#endif
     AddWidget(path, "Anti-aliasing (MSAA)", WIDGET_CVAR_SLIDER_INT)
         .CVar(CVAR_MSAA_VALUE)
         .RaceDisable(false)

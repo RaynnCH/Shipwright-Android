@@ -11,7 +11,7 @@ else {
 }
 
 android {
-    ndkVersion "26.0.10792818"
+    ndkVersion "27.2.12479018"
     namespace 'com.dishii.soh'
     compileSdkVersion 31
     buildFeatures {
