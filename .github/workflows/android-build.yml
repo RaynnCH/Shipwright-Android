@@ -1,4 +1,4 @@
-name: Android ARM64 Build
+name: Android Build
 
 # Simple Android-only build: no repository secrets needed. The APK is an optimized release build signed with a
 # keystore that is generated once and cached, so later builds can be installed over earlier ones.
@@ -13,6 +13,17 @@ concurrency:
 
 jobs:
   build:
+    name: build (${{ matrix.name }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: armv64
+            abi: arm64-v8a
+            artifact: soh-android-armv64-apk
+          - name: armv7
+            abi: armeabi-v7a
+            artifact: soh-android-armv7-apk
     runs-on: ubuntu-24.04
     container:
       image: djvdw7f2ro/android-builder-soh:v1.0.4
@@ -76,9 +87,10 @@ jobs:
       - name: Build APK
         env:
           GIT_TAG: build-${{ github.run_number }}
+          ABI: ${{ matrix.abi }}
         run: |
           cd Android && ./gradlew assembleRelease \
-            -PsohAbis=arm64-v8a \
+            -PsohAbis=${{ matrix.abi }} \
             -PstoreFile=$GITHUB_WORKSPACE/ci-release.jks \
             -PstorePassword=android \
             -PkeyAlias=soh \
@@ -87,12 +99,12 @@ jobs:
       - name: Prepare APK
         run: |
           APK=$(find Android/app/build/outputs/apk/release -name '*.apk' | head -1)
-          cp "$APK" soh-android.apk
+          cp "$APK" ${{ matrix.artifact }}.apk
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: soh-android-apk
-          path: soh-android.apk
+          name: ${{ matrix.artifact }}
+          path: ${{ matrix.artifact }}.apk
           if-no-files-found: error
           retention-days: 14
