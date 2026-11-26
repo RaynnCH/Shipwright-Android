@@ -1,4 +1,4 @@
-name: Android Build
+name: Android ARM64 Build
 
 # Simple Android-only build: no repository secrets needed. The APK is an optimized release build signed with a
 # keystore that is generated once and cached, so later builds can be installed over earlier ones.
@@ -78,6 +78,7 @@ jobs:
           GIT_TAG: build-${{ github.run_number }}
         run: |
           cd Android && ./gradlew assembleRelease \
+            -PsohAbis=arm64-v8a \
             -PstoreFile=$GITHUB_WORKSPACE/ci-release.jks \
             -PstorePassword=android \
             -PkeyAlias=soh \
