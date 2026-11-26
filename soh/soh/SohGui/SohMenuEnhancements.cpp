@@ -2160,6 +2160,70 @@ void SohMenu::AddMenuEnhancements() {
         .HideInSearch(true)
         .Options(WindowButtonOptions().Tooltip("Enables the separate Gameplay Stats Window."));
 
+    // Addon Gameplay
+    path.sidebarName = "Addon Gameplay";
+    AddSidebarEntry("Enhancements", path.sidebarName, 2);
+    path.column = SECTION_COLUMN_1;
+    AddWidget(path, "Microphone Ocarina", WIDGET_SEPARATOR_TEXT);
+    AddWidget(path, "Microphone Ocarina Playback", WIDGET_CVAR_CHECKBOX)
+        .CVar(CVAR_SETTING("CustomOcarina.Microphone"))
+        .RaceDisable(false)
+        .Options(CheckboxOptions().Tooltip(
+            "Play ocarina notes by humming, singing or playing a real instrument into the microphone. "
+            "Recognized notes: D, F, A, B and high D. Android asks for microphone permission the first time."));
+    AddWidget(path, "Mic Sensitivity", WIDGET_CVAR_SLIDER_INT)
+        .CVar(CVAR_SETTING("CustomOcarina.MicSensitivity"))
+        .RaceDisable(false)
+        .PreFunc([](WidgetInfo& info) { info.isHidden = !CVarGetInteger(CVAR_SETTING("CustomOcarina.Microphone"), 0); })
+        .Options(IntSliderOptions().Min(0).Max(100).DefaultValue(45).Format("%d").ShowButtons(true).Tooltip(
+            "Higher values pick up quieter sounds."));
+    AddWidget(path, "Mic Octave Shift", WIDGET_CVAR_SLIDER_INT)
+        .CVar(CVAR_SETTING("CustomOcarina.MicOctave"))
+        .RaceDisable(false)
+        .PreFunc([](WidgetInfo& info) { info.isHidden = !CVarGetInteger(CVAR_SETTING("CustomOcarina.Microphone"), 0); })
+        .Options(IntSliderOptions().Min(-3).Max(3).DefaultValue(0).Format("%d").ShowButtons(true).Tooltip(
+            "Shifts the register up or down."));
+    AddWidget(path, "Mic Tuning (cents)", WIDGET_CVAR_SLIDER_INT)
+        .CVar(CVAR_SETTING("CustomOcarina.MicTuning"))
+        .RaceDisable(false)
+        .PreFunc([](WidgetInfo& info) { info.isHidden = !CVarGetInteger(CVAR_SETTING("CustomOcarina.Microphone"), 0); })
+        .Options(IntSliderOptions().Min(-50).Max(50).DefaultValue(0).Format("%d").ShowButtons(true).Tooltip(
+            "Tunes the detection to your instrument, in hundredths of a semitone."));
+    AddWidget(path, "Tolerant Note Matching", WIDGET_CVAR_CHECKBOX)
+        .CVar(CVAR_SETTING("CustomOcarina.MicTolerant"))
+        .RaceDisable(false)
+        .PreFunc([](WidgetInfo& info) { info.isHidden = !CVarGetInteger(CVAR_SETTING("CustomOcarina.Microphone"), 0); })
+        .Options(CheckboxOptions().Tooltip(
+            "Maps notes outside D/F/A/B to the nearest valid ocarina note. Helps with voice."));
+    AddWidget(path, "Mute In-Game Ocarina While Playing", WIDGET_CVAR_CHECKBOX)
+        .CVar(CVAR_SETTING("CustomOcarina.MicMute"))
+        .RaceDisable(false)
+        .PreFunc([](WidgetInfo& info) { info.isHidden = !CVarGetInteger(CVAR_SETTING("CustomOcarina.Microphone"), 0); })
+        .Options(CheckboxOptions().Tooltip("Keeps the game's ocarina silent for notes you play with the microphone."));
+    AddWidget(path, "Show Microphone Indicator", WIDGET_CVAR_CHECKBOX)
+        .CVar(CVAR_SETTING("CustomOcarina.MicVisual"))
+        .RaceDisable(false)
+        .PreFunc([](WidgetInfo& info) { info.isHidden = !CVarGetInteger(CVAR_SETTING("CustomOcarina.Microphone"), 0); })
+        .Options(CheckboxOptions().Tooltip("Shows light streaks while the microphone hears a sound."));
+    AddWidget(path, "Hide Microphone Status Icon", WIDGET_CVAR_CHECKBOX)
+        .CVar(CVAR_SETTING("CustomOcarina.MicHideStatus"))
+        .RaceDisable(false)
+        .Options(CheckboxOptions().Tooltip("Hides the small microphone icon shown while the ocarina is out."));
+
+    AddWidget(path, "Ocarina Song Menu", WIDGET_SEPARATOR_TEXT);
+    AddWidget(path, "Ocarina Song Menu", WIDGET_CVAR_CHECKBOX)
+        .CVar(CVAR_ENHANCEMENT("OcarinaSongMenu"))
+        .RaceDisable(false)
+        .Options(CheckboxOptions().DefaultValue(true).Tooltip(
+            "While the ocarina is out, tap the 'Song Menu' button (or press D-Pad Down) to open every ocarina "
+            "song with its notes. Tapping a learned song selects it and plays its melody right away."));
+    AddWidget(path, "Cast Song When Tapped", WIDGET_CVAR_CHECKBOX)
+        .CVar(CVAR_ENHANCEMENT("OcarinaSongMenuInstantCast"))
+        .RaceDisable(false)
+        .Options(CheckboxOptions().Tooltip(
+            "Tapping a learned song in the Song Menu performs it for you, as if you had played the notes "
+            "correctly. Off: it only plays the melody so you can learn it."));
+
     // Time Splits
     path.sidebarName = "Time Splits";
     AddSidebarEntry("Enhancements", path.sidebarName, 1);

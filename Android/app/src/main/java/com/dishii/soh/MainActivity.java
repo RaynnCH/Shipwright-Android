@@ -496,6 +496,24 @@ public class MainActivity extends SDLActivity{
         }
     }
 
+    private static final int MIC_PERMISSION_REQUEST_CODE = 2297;
+
+    // Called from native code (MicOcarina) when the microphone ocarina is turned on.
+    public boolean hasMicPermission() {
+        return Build.VERSION.SDK_INT < Build.VERSION_CODES.M
+                || ActivityCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO)
+                        == PackageManager.PERMISSION_GRANTED;
+    }
+
+    public void requestMicPermission() {
+        runOnUiThread(() -> {
+            if (!hasMicPermission()) {
+                ActivityCompat.requestPermissions(this, new String[]{ Manifest.permission.RECORD_AUDIO },
+                        MIC_PERMISSION_REQUEST_CODE);
+            }
+        });
+    }
+
     private static final int STORAGE_PERMISSION_REQUEST_CODE = 2296;
     private static final int FILE_PICKER_REQUEST_CODE = 0;
 

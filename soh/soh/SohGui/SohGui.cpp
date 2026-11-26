@@ -43,6 +43,8 @@
 #include "soh/Enhancements/timesplits/TimeSplitsSettings.h"
 #include "soh/Enhancements/randomizer/Plandomizer.h"
 #include "soh/SohGui/SohModals.h"
+#include "soh/Enhancements/OcarinaSongMenu/OcarinaSongMenu.h"
+#include "soh/Enhancements/MicOcarina/MicOcarinaOverlay.h"
 
 namespace SohGui {
 
@@ -77,6 +79,33 @@ std::string GetWindowButtonText(const char* text, bool menuOpen) {
 }
 
 // MARK: - Delegates
+
+// Invisible, always-running window: draws the microphone ocarina indicator (light streaks and status icon).
+class MicOcarinaOverlayWindow final : public Ship::GuiWindow {
+  public:
+    using Ship::GuiWindow::GuiWindow;
+    void Draw() override {
+        DrawElement();
+    }
+    void InitElement() override {
+    }
+    void UpdateElement() override {
+    }
+    void DrawElement() override {
+        if (!CVarGetInteger(CVAR_ENHANCEMENT("AddonGameplay.MicOverlayEnabled"), 1)) {
+            return;
+        }
+        const bool micEnabled = CVarGetInteger(CVAR_SETTING("CustomOcarina.Microphone"), 0) != 0;
+        const bool showStreaks = CVarGetInteger(CVAR_SETTING("CustomOcarina.MicVisual"), 0) != 0;
+        const bool showStatus = CVarGetInteger(CVAR_SETTING("CustomOcarina.MicHideStatus"), 0) == 0;
+        if (showStreaks || showStatus) {
+            MicOcarinaOverlay_Draw(micEnabled, showStreaks, showStatus);
+        }
+    }
+};
+
+std::shared_ptr<OcarinaSongMenuWindow> mOcarinaSongMenuWindow;
+std::shared_ptr<MicOcarinaOverlayWindow> mMicOcarinaOverlayWindow;
 
 std::shared_ptr<Ship::GuiWindow> mConsoleWindow;
 std::shared_ptr<SohStatsWindow> mStatsWindow;
@@ -129,6 +158,8 @@ std::vector<std::shared_ptr<Ship::GuiWindow>> GetAllGuiWindows() {
         mModMenuWindow,
         mAudioEditorWindow,
         mInputViewer,
+        mOcarinaSongMenuWindow,
+        mMicOcarinaOverlayWindow,
         mInputViewerSettings,
         mCosmeticsEditorWindow,
         mActorViewerWindow,
@@ -200,6 +231,14 @@ void SetupGuiElements() {
     gui->AddGuiWindow(mAudioEditorWindow);
     mInputViewer = std::make_shared<InputViewer>(CVAR_WINDOW("InputViewer"), "Input Viewer");
     gui->AddGuiWindow(mInputViewer);
+    mOcarinaSongMenuWindow =
+        std::make_shared<OcarinaSongMenuWindow>(CVAR_WINDOW("OcarinaSongMenu"), "Ocarina Song Menu");
+    gui->AddGuiWindow(mOcarinaSongMenuWindow);
+    mOcarinaSongMenuWindow->Show();
+    mMicOcarinaOverlayWindow =
+        std::make_shared<MicOcarinaOverlayWindow>(CVAR_WINDOW("MicOcarinaOverlay"), "Microphone Ocarina Indicator");
+    gui->AddGuiWindow(mMicOcarinaOverlayWindow);
+    mMicOcarinaOverlayWindow->Show();
     mInputViewerSettings = std::make_shared<InputViewerSettingsWindow>(CVAR_WINDOW("InputViewerSettings"),
                                                                        "Input Viewer Settings", ImVec2(500, 525));
     gui->AddGuiWindow(mInputViewerSettings);
@@ -301,6 +340,8 @@ void Destroy() {
     mConsoleWindow = nullptr;
     mGfxDebuggerWindow = nullptr;
     mInputViewer = nullptr;
+    mOcarinaSongMenuWindow = nullptr;
+    mMicOcarinaOverlayWindow = nullptr;
     mInputViewerSettings = nullptr;
     mTimeSplitsWindow = nullptr;
     mTimeSplitSettingsWindow = nullptr;
