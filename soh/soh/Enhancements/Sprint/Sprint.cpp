@@ -157,8 +157,10 @@ extern "C" float Sprint_GetAnimFactor(Player* player) {
     if (!sActive || player != GET_PLAYER(gPlayState)) {
         return 1.0f;
     }
-    // Speed already drives the run cycle; add a quicker, more urgent leg cadence on top.
-    return 1.0f + (Sprint_GetRunFactor(player) - 1.0f) * 0.3f;
+    // Run playback already scales with velocity. Like Dawnlight, play the run cycle at only half the speed bonus
+    // (130% movement -> 115% playback) so the stride does not look sped up; divide out the velocity scaling.
+    float run = Sprint_GetRunFactor(player);
+    return (1.0f + (run - 1.0f) * 0.5f) / run;
 }
 
 static void RegisterSprint() {
