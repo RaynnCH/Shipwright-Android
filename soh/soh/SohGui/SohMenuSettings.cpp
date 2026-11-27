@@ -981,7 +981,7 @@ void SohMenu::AddMenuSettings() {
             info.isHidden = CVarGetInteger(CVAR_SETTING("TouchControls.Style"),0) == 0 ||
                             !CVarGetInteger(CVAR_ENHANCEMENT("Sprint"), 0);
         })
-        .Options(IntSliderOptions().Min(110).Max(300).DefaultValue(170).Step(5).Format("%d%%"));
+        .Options(IntSliderOptions().Min(110).Max(300).DefaultValue(130).Step(5).Format("%d%%"));
     static const std::map<int32_t,const char*> touchVaultModes = {{0,"Automatic"},{1,"Manual"}};
     AddWidget(path,"Vaulting Mode",WIDGET_CVAR_COMBOBOX)
         .CVar(CVAR_ENHANCEMENT("ManualJumpVaultMode"))

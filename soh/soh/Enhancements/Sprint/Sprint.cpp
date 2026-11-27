@@ -150,7 +150,7 @@ extern "C" float Sprint_GetRunFactor(Player* player) {
     if (!sActive || player != GET_PLAYER(gPlayState)) {
         return 1.0f;
     }
-    return std::clamp(CVarGetInteger(CVAR_SPRINT_SPEED, 170), 110, 300) / 100.0f;
+    return std::clamp(CVarGetInteger(CVAR_SPRINT_SPEED, 130), 110, 300) / 100.0f;
 }
 
 extern "C" float Sprint_GetAnimFactor(Player* player) {
