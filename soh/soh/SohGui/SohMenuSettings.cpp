@@ -924,6 +924,55 @@ void SohMenu::AddMenuSettings() {
                 "Off restores its saved assignment. If this button was Navi, Navi returns to the Fairy/C-up control. "
                 "Physical controller bindings are unchanged."));
     }
+    AddWidget(path, "Enable Sprint", WIDGET_CVAR_CHECKBOX)
+        .CVar(CVAR_ENHANCEMENT("Sprint"))
+        .PreFunc([](WidgetInfo& info) { info.isHidden = CVarGetInteger(CVAR_SETTING("TouchControls.Style"), 0) == 0; })
+        .Callback([](WidgetInfo&) {
+            SetMobileIntegratedTouch();
+            Ship::Context::GetRawInstance()->GetWindow()->GetGui()->SaveConsoleVariablesNextFrame();
+        })
+        .Options(CheckboxOptions().Tooltip(
+            "Lets Link sprint: faster run, a quicker leg cadence and kicked-up dust. Works on the ground only "
+            "(not in water, on a horse, on ladders or while talking). Physical controllers can bind Sprint in "
+            "Controls > Manual Jump / Sprint."));
+    static const std::map<int32_t,const char*> touchSprintButtons[3] = {
+        {{0,"Off"},{1,"C-left"},{2,"C-down"},{3,"C-right"},{4,"L"},{5,"R"}},
+        {{0,"Off"},{1,"X"},{2,"Y"},{3,"ZR"},{4,"L"},{5,"R"}},
+        {{0,"Off"},{1,"X"},{2,"Y"},{3,"ZR"},{4,"L"},{5,"R"}}
+    };
+    for (int style=1; style<=3; ++style) {
+        AddWidget(path,"Sprint Button##TouchSprint"+std::to_string(style),WIDGET_CVAR_COMBOBOX)
+            .CVar(TouchHud::SprintCvar(style))
+            .PreFunc([style](WidgetInfo& info) {
+                info.isHidden = CVarGetInteger(CVAR_SETTING("TouchControls.Style"),0) != style ||
+                                !CVarGetInteger(CVAR_ENHANCEMENT("Sprint"), 0);
+            })
+            .RaceDisable(false)
+            .Callback([](WidgetInfo&) {
+                SetMobileIntegratedTouch();
+                Ship::Context::GetRawInstance()->GetWindow()->GetGui()->SaveConsoleVariablesNextFrame();
+            })
+            .Options(ComboboxOptions().DefaultIndex(0).ComboMap(touchSprintButtons[style-1]).Tooltip(
+                "Touch button used for Sprint. It replaces that button's item assignment (Off restores it) and is "
+                "not used if Manual Jump already uses the same button. Physical controller bindings are unchanged."));
+    }
+    static const std::map<int32_t,const char*> touchSprintModes = {{0,"Toggle"},{1,"Hold"}};
+    AddWidget(path,"Sprint Mode",WIDGET_CVAR_COMBOBOX)
+        .CVar(CVAR_ENHANCEMENT("SprintMode"))
+        .PreFunc([](WidgetInfo& info) {
+            info.isHidden = CVarGetInteger(CVAR_SETTING("TouchControls.Style"),0) == 0 ||
+                            !CVarGetInteger(CVAR_ENHANCEMENT("Sprint"), 0);
+        })
+        .Options(ComboboxOptions().DefaultIndex(0).ComboMap(touchSprintModes).Tooltip(
+            "Toggle: tap once to start sprinting; it stops when you stop moving or tap again. "
+            "Hold: sprint only while the button is held."));
+    AddWidget(path,"Sprint Speed: %d%%",WIDGET_CVAR_SLIDER_INT)
+        .CVar(CVAR_ENHANCEMENT("SprintSpeed"))
+        .PreFunc([](WidgetInfo& info) {
+            info.isHidden = CVarGetInteger(CVAR_SETTING("TouchControls.Style"),0) == 0 ||
+                            !CVarGetInteger(CVAR_ENHANCEMENT("Sprint"), 0);
+        })
+        .Options(IntSliderOptions().Min(110).Max(300).DefaultValue(170).Step(5).Format("%d%%"));
     static const std::map<int32_t,const char*> touchVaultModes = {{0,"Automatic"},{1,"Manual"}};
     AddWidget(path,"Vaulting Mode",WIDGET_CVAR_COMBOBOX)
         .CVar(CVAR_ENHANCEMENT("ManualJumpVaultMode"))
@@ -998,6 +1047,7 @@ void SohMenu::AddMenuSettings() {
             for (int i=0; i<TouchHud::BindingCount; ++i)
                 CVarSetInteger(TouchHud::BindingCvar(style, i), TouchHud::DefaultAction(style, i));
             CVarSetInteger(TouchHud::JumpCvar(style), 0);
+            CVarSetInteger(TouchHud::SprintCvar(style), 0);
             SetMobileIntegratedTouch();
             Ship::Context::GetRawInstance()->GetWindow()->GetGui()->SaveConsoleVariablesNextFrame();
         }).Options(ButtonOptions().Tooltip("Restores only this preset's touch assignments. Positions, sizes and physical controllers are unchanged."));

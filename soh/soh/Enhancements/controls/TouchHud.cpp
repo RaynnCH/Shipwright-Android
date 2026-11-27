@@ -81,6 +81,12 @@ extern "C" int TouchHud_GetBindings(int style, int32_t* bindings, int count) {
         int index = TouchHud::JumpIndex(style, CVarGetInteger(TouchHud::JumpCvar(style), 0));
         if (index >= 0) bindings[index] = TouchHud::ManualJump;
     }
+    if (settingsReady && CVarGetInteger(CVAR_ENHANCEMENT("Sprint"), 0) && !OcarinaPlaying() &&
+        !(gPlayState && gPlayState->pauseCtx.state != 0)) {
+        int index = TouchHud::SprintIndex(style, CVarGetInteger(TouchHud::SprintCvar(style), 0));
+        const int jumpIndex = ManualJumpActive() ? TouchHud::JumpIndex(style, CVarGetInteger(TouchHud::JumpCvar(style), 0)) : -1;
+        if (index >= 0 && index != jumpIndex) bindings[index] = TouchHud::Sprint;
+    }
     return TouchHud::BindingCount;
 }
 extern "C" void TouchHud_SetButton(uint32_t mask, int down) {

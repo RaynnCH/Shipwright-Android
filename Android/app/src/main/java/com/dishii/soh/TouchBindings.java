@@ -4,7 +4,7 @@ package com.dishii.soh;
 final class TouchBindings {
     static final String[] KEYS = {"a","b","cl","cd","cr","cu","z","l","r","du","dd","dl","dr","start","fairy","map"};
     static final int NAVI = 5;
-    private static final int[] MASKS = {0,0x8000,0x4000,0x2000,0x10,0x20000,2,4,1,0x20,8,0x1000,0x800,0x400,0x200,0x100,0x10000,0x01000000,0x40,0x80};
+    private static final int[] MASKS = {0,0x8000,0x4000,0x2000,0x10,0x20000,2,4,1,0x20,8,0x1000,0x800,0x400,0x200,0x100,0x10000,0x01000000,0x40,0x80,0x10000000};
     static int index(String key) {
         for (int i=0;i<KEYS.length;i++) if(KEYS[i].equals(key)) return i;
         return -1;

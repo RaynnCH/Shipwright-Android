@@ -330,6 +330,7 @@ OTRGlobals::OTRGlobals() {
         BTN_CUSTOM_OCARINA_PITCH_UP,
         BTN_CUSTOM_OCARINA_PITCH_DOWN,
         BTN_CUSTOM_JUMP,
+        BTN_CUSTOM_SPRINT,
     }));
     context->InitControlDeck(controlDeck);
 #if defined(__IOS__) && !defined(__TVOS__)

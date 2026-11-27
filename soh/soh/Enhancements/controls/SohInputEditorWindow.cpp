@@ -1591,6 +1591,7 @@ void SohInputEditorWindow::DrawLinkTab() {
                          CheckboxOptions().Tooltip("Use the Jump binding for grounded jumps. Unchecked restores the "
                                                    "game's default automatic ledge jumps."));
             DrawButtonLine("Jump", portIndex, BTN_CUSTOM_JUMP);
+            DrawButtonLine("Sprint", portIndex, BTN_CUSTOM_SPRINT);
             static std::vector<const char*> vaultModes = { "Automatic", "Manual" };
             CVarCombobox("Vaulting Mode", CVAR_ENHANCEMENT("ManualJumpVaultMode"), vaultModes,
                          UIWidgets::ComboboxOptions().DefaultIndex(1).Tooltip(

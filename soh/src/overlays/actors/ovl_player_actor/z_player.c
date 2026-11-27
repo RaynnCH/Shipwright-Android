@@ -7,6 +7,7 @@
 #include <libultraship/libultra.h>
 #include "global.h"
 #include "soh/Enhancements/ManualJump/ManualJump.h"
+#include "soh/Enhancements/Sprint/Sprint.h"
 #include "soh/Enhancements/controls/TouchHud.h"
 
 #include "overlays/actors/ovl_Bg_Heavy_Block/z_bg_heavy_block.h"
@@ -8472,7 +8473,7 @@ void Player_Action_80840DE4(Player* this, PlayState* play) {
         direction = -1;
     }
 
-    this->skelAnime.playSpeed = direction * (this->linearVelocity * coeff);
+    this->skelAnime.playSpeed = direction * (this->linearVelocity * coeff * Sprint_GetAnimFactor(this));
 
     LinkAnimation_Update(play, &this->skelAnime);
 
