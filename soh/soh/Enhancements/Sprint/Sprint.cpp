@@ -1,12 +1,8 @@
 #include <libultraship/bridge.h>
 #include <algorithm>
-#include <cstdio>
-#include <string>
-#include <vector>
 #include "soh/Enhancements/game-interactor/GameInteractor.h"
 #include "soh/OTRGlobals.h"
 #include "soh/ShipInit.hpp"
-#include <ship/Context.h>
 #include "Sprint.h"
 
 extern "C" {
@@ -18,12 +14,14 @@ extern PlayState* gPlayState;
 
 #define CVAR_SPRINT CVAR_ENHANCEMENT("Sprint")
 #define CVAR_SPRINT_MODE CVAR_ENHANCEMENT("SprintMode") // 0 = toggle, 1 = hold
-#define CVAR_SPRINT_SPEED CVAR_ENHANCEMENT("SprintSpeed") // percent
+constexpr float kSprintSpeed = 1.3f;     // fixed 130% top speed
+constexpr float kSprintRampFrames = 20.0f; // wind-up: frames to reach full sprint speed
 
 static bool sToggled = false;
 static bool sActive = false;
 static int sStillFrames = 0;
 static int sDustTimer = 0;
+static float sRamp = 0.0f; // 0..1 wind-up toward full sprint speed
 
 static bool SprintEnabled() {
     return CVarGetInteger(CVAR_SPRINT, 0) != 0;
@@ -34,6 +32,7 @@ static void ClearSprint() {
     sActive = false;
     sStillFrames = 0;
     sDustTimer = 0;
+    sRamp = 0.0f;
 }
 
 static bool CanSprintNow(Player* player) {
@@ -45,67 +44,7 @@ static bool CanSprintNow(Player* player) {
 }
 
 
-// ---- Debug: records Link's real skeleton and run cycle to SOHR/sprint_dump.txt so a sprint animation can be
-// authored against the true bone layout instead of guessing joint axes.
-#define CVAR_SPRINT_DUMP CVAR_ENHANCEMENT("SprintDump")
-static std::vector<std::string> sDumpFrames;
-static bool sDumpHeaderDone = false;
-static std::string sDumpHeader;
-
-static void RecordRunDump() {
-    if (gPlayState == nullptr) {
-        return;
-    }
-    Player* player = GET_PLAYER(gPlayState);
-    SkelAnime* sk = &player->skelAnime;
-    if (!sDumpHeaderDone) {
-        sDumpHeaderDone = true;
-        char buf[256];
-        snprintf(buf, sizeof(buf), "age=%d limbCount=%d\n", (int)gSaveContext.linkAge, (int)sk->limbCount);
-        sDumpHeader = buf;
-        for (int i = 0; i < sk->limbCount; i++) {
-            StandardLimb* limb = (StandardLimb*)SEGMENTED_TO_VIRTUAL(sk->skeleton[i]);
-            snprintf(buf, sizeof(buf), "limb %d pos %d %d %d child %d sibling %d\n", i, (int)limb->jointPos.x,
-                     (int)limb->jointPos.y, (int)limb->jointPos.z, (int)limb->child, (int)limb->sibling);
-            sDumpHeader += buf;
-        }
-    }
-    if (player->linearVelocity < 4.0f || (player->actor.bgCheckFlags & BGCHECKFLAG_GROUND) == 0) {
-        return;
-    }
-    std::string line;
-    char buf[160];
-    snprintf(buf, sizeof(buf), "frame anim=%p len=%.1f cur=%.2f speed=%.2f vel=%.2f joints=", sk->animation,
-             sk->animLength, sk->curFrame, sk->playSpeed, player->linearVelocity);
-    line = buf;
-    for (int i = 0; i <= sk->limbCount; i++) {
-        snprintf(buf, sizeof(buf), "%d,%d,%d;", (int)sk->jointTable[i].x, (int)sk->jointTable[i].y,
-                 (int)sk->jointTable[i].z);
-        line += buf;
-    }
-    sDumpFrames.push_back(line + "\n");
-    if (sDumpFrames.size() >= 240) {
-        std::string path = Ship::Context::GetPathRelativeToAppDirectory("sprint_dump.txt");
-        if (FILE* f = fopen(path.c_str(), "w")) {
-            fputs(sDumpHeader.c_str(), f);
-            for (const auto& l : sDumpFrames) {
-                fputs(l.c_str(), f);
-            }
-            fclose(f);
-        }
-        sDumpFrames.clear();
-        sDumpHeaderDone = false;
-        CVarSetInteger(CVAR_SPRINT_DUMP, 0);
-    }
-}
-
 static void UpdateSprint() {
-    if (CVarGetInteger(CVAR_SPRINT_DUMP, 0)) {
-        RecordRunDump();
-    } else if (!sDumpFrames.empty()) {
-        sDumpFrames.clear();
-        sDumpHeaderDone = false;
-    }
     if (gPlayState == nullptr || !SprintEnabled()) {
         ClearSprint();
         return;
@@ -131,6 +70,9 @@ static void UpdateSprint() {
         sActive = sToggled && moving && allowed;
     }
 
+    // Ease into the sprint instead of snapping to speed; ease back out when it ends.
+    sRamp = sActive ? std::min(1.0f, sRamp + 1.0f / kSprintRampFrames) : std::max(0.0f, sRamp - 2.0f / kSprintRampFrames);
+
     if (sActive) {
         // Kicked-up dust at the feet, a few frames apart, like the run-dust used when stopping.
         if (--sDustTimer <= 0) {
@@ -147,14 +89,15 @@ static void UpdateSprint() {
 }
 
 extern "C" float Sprint_GetRunFactor(Player* player) {
-    if (!sActive || player != GET_PLAYER(gPlayState)) {
+    if (sRamp <= 0.0f || player != GET_PLAYER(gPlayState)) {
         return 1.0f;
     }
-    return std::clamp(CVarGetInteger(CVAR_SPRINT_SPEED, 130), 110, 300) / 100.0f;
+    const float t = sRamp * sRamp * (3.0f - 2.0f * sRamp); // smoothstep
+    return 1.0f + (kSprintSpeed - 1.0f) * t;
 }
 
 extern "C" float Sprint_GetAnimFactor(Player* player) {
-    if (!sActive || player != GET_PLAYER(gPlayState)) {
+    if (sRamp <= 0.0f || player != GET_PLAYER(gPlayState)) {
         return 1.0f;
     }
     // Run playback already scales with velocity. Like Dawnlight, play the run cycle at only half the speed bonus
@@ -165,8 +108,8 @@ extern "C" float Sprint_GetAnimFactor(Player* player) {
 
 static void RegisterSprint() {
     ClearSprint();
-    COND_HOOK(OnPlayerUpdate, SprintEnabled() || CVarGetInteger(CVAR_SPRINT_DUMP, 0), UpdateSprint);
+    COND_HOOK(OnPlayerUpdate, SprintEnabled(), UpdateSprint);
     COND_HOOK(OnPlayDestroy, true, ClearSprint);
 }
 
-static RegisterShipInitFunc initFunc(RegisterSprint, { CVAR_SPRINT, CVAR_SPRINT_DUMP });
+static RegisterShipInitFunc initFunc(RegisterSprint, { CVAR_SPRINT });
