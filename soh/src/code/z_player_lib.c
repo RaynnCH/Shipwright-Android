@@ -6,6 +6,7 @@
 #include "overlays/actors/ovl_Demo_Effect/z_demo_effect.h"
 
 #include <libultraship/bridge/resourcebridge.h>
+#include "soh/Enhancements/Sprint/Sprint.h"
 #include "soh/Enhancements/game-interactor/GameInteractor.h"
 #include "soh/Enhancements/game-interactor/GameInteractor_Hooks.h"
 #include "soh/Enhancements/randomizer/draw.h"
@@ -1336,6 +1337,9 @@ s32 Player_OverrideLimbDrawGameplayCommon(PlayState* play, s32 limbIndex, Gfx** 
             rot->x += this->headLimbRot.z;
             rot->y -= this->headLimbRot.y;
             rot->z += this->headLimbRot.x;
+            rot->z -= Sprint_GetLean(this) / 2; // keep the head looking ahead while the body hunches
+        } else if (limbIndex == PLAYER_LIMB_L_FOREARM || limbIndex == PLAYER_LIMB_R_FOREARM) {
+            rot->z += Sprint_GetArmBend(this);
         } else if (limbIndex == PLAYER_LIMB_L_HAND) {
             if (CVarGetInteger(CVAR_COSMETIC("Link.SwordScale.Changed"), 0)) {
                 f32 scale = CVarGetFloat(CVAR_COSMETIC("Link.SwordScale.Value"), 1.0f);
@@ -1357,6 +1361,9 @@ s32 Player_OverrideLimbDrawGameplayCommon(PlayState* play, s32 limbIndex, Gfx** 
             }
             if (this->upperLimbRot.z != 0) {
                 Matrix_RotateZ(this->upperLimbRot.z * (M_PI / 0x8000), MTXMODE_APPLY);
+            }
+            if (Sprint_GetLean(this) != 0) {
+                Matrix_RotateX(Sprint_GetLean(this) * (M_PI / 0x8000), MTXMODE_APPLY);
             }
         } else if (limbIndex == PLAYER_LIMB_L_THIGH) {
             func_8008F87C(play, this, &this->skelAnime, pos, rot, PLAYER_LIMB_L_THIGH, PLAYER_LIMB_L_SHIN,

@@ -20,6 +20,7 @@ static bool sToggled = false;
 static bool sActive = false;
 static int sStillFrames = 0;
 static int sDustTimer = 0;
+static float sBlend = 0.0f; // 0..1 ease in/out of the sprint pose
 
 static bool SprintEnabled() {
     return CVarGetInteger(CVAR_SPRINT, 0) != 0;
@@ -30,6 +31,7 @@ static void ClearSprint() {
     sActive = false;
     sStillFrames = 0;
     sDustTimer = 0;
+    sBlend = 0.0f;
 }
 
 static bool CanSprintNow(Player* player) {
@@ -66,6 +68,9 @@ static void UpdateSprint() {
         sActive = sToggled && moving && allowed;
     }
 
+    // Ease the pose in and out so the hunch and arm pump do not pop.
+    sBlend = sActive ? std::min(1.0f, sBlend + 0.12f) : std::max(0.0f, sBlend - 0.10f);
+
     if (sActive) {
         // Kicked-up dust at the feet, a few frames apart, like the run-dust used when stopping.
         if (--sDustTimer <= 0) {
@@ -94,6 +99,26 @@ extern "C" float Sprint_GetAnimFactor(Player* player) {
     }
     // Speed already drives the run cycle; add a quicker, more urgent leg cadence on top.
     return 1.0f + (Sprint_GetRunFactor(player) - 1.0f) * 0.3f;
+}
+
+static s16 DegToBinang(int degrees) {
+    return static_cast<s16>(degrees * (0x8000 / 180.0f));
+}
+
+extern "C" s16 Sprint_GetLean(Player* player) {
+    if (sBlend <= 0.0f || gPlayState == nullptr || player != GET_PLAYER(gPlayState)) {
+        return 0;
+    }
+    return static_cast<s16>(DegToBinang(std::clamp(CVarGetInteger(CVAR_ENHANCEMENT("SprintLean"), 14), -40, 40)) *
+                            sBlend);
+}
+
+extern "C" s16 Sprint_GetArmBend(Player* player) {
+    if (sBlend <= 0.0f || gPlayState == nullptr || player != GET_PLAYER(gPlayState)) {
+        return 0;
+    }
+    return static_cast<s16>(
+        DegToBinang(std::clamp(CVarGetInteger(CVAR_ENHANCEMENT("SprintArmBend"), 60), -100, 100)) * sBlend);
 }
 
 static void RegisterSprint() {

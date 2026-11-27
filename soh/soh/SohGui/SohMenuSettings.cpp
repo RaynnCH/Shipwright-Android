@@ -937,7 +937,7 @@ void SohMenu::AddMenuSettings() {
             "Controls > Manual Jump / Sprint."));
     static const std::map<int32_t,const char*> touchSprintButtons[3] = {
         {{0,"Off"},{1,"C-left"},{2,"C-down"},{3,"C-right"},{4,"L"},{5,"R"}},
-        {{0,"Off"},{1,"X"},{2,"Y"},{3,"ZR"},{4,"L"},{5,"R"}},
+        {{0,"Off"},{1,"X"},{2,"Y"},{3,"Z"},{4,"L"},{5,"R"}},
         {{0,"Off"},{1,"X"},{2,"Y"},{3,"ZR"},{4,"L"},{5,"R"}}
     };
     for (int style=1; style<=3; ++style) {
@@ -966,6 +966,23 @@ void SohMenu::AddMenuSettings() {
         .Options(ComboboxOptions().DefaultIndex(0).ComboMap(touchSprintModes).Tooltip(
             "Toggle: tap once to start sprinting; it stops when you stop moving or tap again. "
             "Hold: sprint only while the button is held."));
+    AddWidget(path,"Sprint Lean",WIDGET_CVAR_SLIDER_INT)
+        .CVar(CVAR_ENHANCEMENT("SprintLean"))
+        .PreFunc([](WidgetInfo& info) {
+            info.isHidden = CVarGetInteger(CVAR_SETTING("TouchControls.Style"),0) == 0 ||
+                            !CVarGetInteger(CVAR_ENHANCEMENT("Sprint"), 0);
+        })
+        .Options(IntSliderOptions().Min(-40).Max(40).DefaultValue(14).Step(1).Format("%d deg").Tooltip(
+            "How far Link hunches forward while sprinting. If the body leans backwards, use a negative value."));
+    AddWidget(path,"Sprint Arm Bend",WIDGET_CVAR_SLIDER_INT)
+        .CVar(CVAR_ENHANCEMENT("SprintArmBend"))
+        .PreFunc([](WidgetInfo& info) {
+            info.isHidden = CVarGetInteger(CVAR_SETTING("TouchControls.Style"),0) == 0 ||
+                            !CVarGetInteger(CVAR_ENHANCEMENT("Sprint"), 0);
+        })
+        .Options(IntSliderOptions().Min(-100).Max(100).DefaultValue(60).Step(1).Format("%d deg").Tooltip(
+            "Elbow bend of both arms while sprinting, like a real runner. If the elbows bend the wrong way, "
+            "use a negative value. 0 keeps the normal arm pose."));
     AddWidget(path,"Sprint Speed: %d%%",WIDGET_CVAR_SLIDER_INT)
         .CVar(CVAR_ENHANCEMENT("SprintSpeed"))
         .PreFunc([](WidgetInfo& info) {

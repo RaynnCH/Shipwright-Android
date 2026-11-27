@@ -54,8 +54,13 @@ inline int JumpIndex(int style, int choice) {
 // Sprint button choices: 1..5 -> C-left/X, C-down/Y, C-right/ZR(X on N64), L, R binding slots.
 inline int SprintIndex(int style, int choice) {
     if (style < 1 || style > 3 || choice < 1 || choice > 5) return -1;
-    constexpr int indices[5] = {2, 3, 4, 7, 8};
-    return indices[choice-1];
+    // Same physical-button identities as the labels shown for each preset (see SohMenuSettings labels[]).
+    constexpr int indices[3][5] = {
+        {2, 3, 4, 7, 8}, // N64:   C-left, C-down, C-right, L, R
+        {4, 2, 3, 6, 8}, // GC:    X, Y, Z, L, R
+        {2, 3, 4, 7, 8}, // Modern: X, Y, ZR, L, R
+    };
+    return indices[style-1][choice-1];
 }
 inline const char* SprintCvar(int style) {
     static const std::array<std::string,4> paths = {
