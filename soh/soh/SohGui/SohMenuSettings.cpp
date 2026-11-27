@@ -975,23 +975,6 @@ void SohMenu::AddMenuSettings() {
         .Options(CheckboxOptions().Tooltip(
             "Turn on, then run in a straight line on flat ground for about 5 seconds. Writes sprint_dump.txt "
             "to your SOHR folder and turns itself off. Used to build an accurate sprint animation."));
-    AddWidget(path,"Sprint Lean",WIDGET_CVAR_SLIDER_INT)
-        .CVar(CVAR_ENHANCEMENT("SprintLean"))
-        .PreFunc([](WidgetInfo& info) {
-            info.isHidden = CVarGetInteger(CVAR_SETTING("TouchControls.Style"),0) == 0 ||
-                            !CVarGetInteger(CVAR_ENHANCEMENT("Sprint"), 0);
-        })
-        .Options(IntSliderOptions().Min(-40).Max(40).DefaultValue(14).Step(1).Format("%d deg").Tooltip(
-            "How far Link hunches forward while sprinting. If the body leans backwards, use a negative value."));
-    AddWidget(path,"Sprint Arm Bend",WIDGET_CVAR_SLIDER_INT)
-        .CVar(CVAR_ENHANCEMENT("SprintArmBend"))
-        .PreFunc([](WidgetInfo& info) {
-            info.isHidden = CVarGetInteger(CVAR_SETTING("TouchControls.Style"),0) == 0 ||
-                            !CVarGetInteger(CVAR_ENHANCEMENT("Sprint"), 0);
-        })
-        .Options(IntSliderOptions().Min(-100).Max(100).DefaultValue(60).Step(1).Format("%d deg").Tooltip(
-            "Elbow bend of both arms while sprinting, like a real runner. If the elbows bend the wrong way, "
-            "use a negative value. 0 keeps the normal arm pose."));
     AddWidget(path,"Sprint Speed: %d%%",WIDGET_CVAR_SLIDER_INT)
         .CVar(CVAR_ENHANCEMENT("SprintSpeed"))
         .PreFunc([](WidgetInfo& info) {
