@@ -1,8 +1,12 @@
 #include <libultraship/bridge.h>
 #include <algorithm>
+#include <cstdio>
+#include <string>
+#include <vector>
 #include "soh/Enhancements/game-interactor/GameInteractor.h"
 #include "soh/OTRGlobals.h"
 #include "soh/ShipInit.hpp"
+#include <ship/Context.h>
 #include "Sprint.h"
 
 extern "C" {
@@ -42,7 +46,68 @@ static bool CanSprintNow(Player* player) {
            (player->actor.bgCheckFlags & BGCHECKFLAG_GROUND) != 0;
 }
 
+
+// ---- Debug: records Link's real skeleton and run cycle to SOHR/sprint_dump.txt so a sprint animation can be
+// authored against the true bone layout instead of guessing joint axes.
+#define CVAR_SPRINT_DUMP CVAR_ENHANCEMENT("SprintDump")
+static std::vector<std::string> sDumpFrames;
+static bool sDumpHeaderDone = false;
+static std::string sDumpHeader;
+
+static void RecordRunDump() {
+    if (gPlayState == nullptr) {
+        return;
+    }
+    Player* player = GET_PLAYER(gPlayState);
+    SkelAnime* sk = &player->skelAnime;
+    if (!sDumpHeaderDone) {
+        sDumpHeaderDone = true;
+        char buf[256];
+        snprintf(buf, sizeof(buf), "age=%d limbCount=%d\n", (int)gSaveContext.linkAge, (int)sk->limbCount);
+        sDumpHeader = buf;
+        for (int i = 0; i < sk->limbCount; i++) {
+            StandardLimb* limb = (StandardLimb*)SEGMENTED_TO_VIRTUAL(sk->skeleton[i]);
+            snprintf(buf, sizeof(buf), "limb %d pos %d %d %d child %d sibling %d\n", i, (int)limb->jointPos.x,
+                     (int)limb->jointPos.y, (int)limb->jointPos.z, (int)limb->child, (int)limb->sibling);
+            sDumpHeader += buf;
+        }
+    }
+    if (player->linearVelocity < 4.0f || (player->actor.bgCheckFlags & BGCHECKFLAG_GROUND) == 0) {
+        return;
+    }
+    std::string line;
+    char buf[160];
+    snprintf(buf, sizeof(buf), "frame anim=%p len=%.1f cur=%.2f speed=%.2f vel=%.2f joints=", sk->animation,
+             sk->animLength, sk->curFrame, sk->playSpeed, player->linearVelocity);
+    line = buf;
+    for (int i = 0; i <= sk->limbCount; i++) {
+        snprintf(buf, sizeof(buf), "%d,%d,%d;", (int)sk->jointTable[i].x, (int)sk->jointTable[i].y,
+                 (int)sk->jointTable[i].z);
+        line += buf;
+    }
+    sDumpFrames.push_back(line + "\n");
+    if (sDumpFrames.size() >= 240) {
+        std::string path = Ship::Context::GetPathRelativeToAppDirectory("sprint_dump.txt");
+        if (FILE* f = fopen(path.c_str(), "w")) {
+            fputs(sDumpHeader.c_str(), f);
+            for (const auto& l : sDumpFrames) {
+                fputs(l.c_str(), f);
+            }
+            fclose(f);
+        }
+        sDumpFrames.clear();
+        sDumpHeaderDone = false;
+        CVarSetInteger(CVAR_SPRINT_DUMP, 0);
+    }
+}
+
 static void UpdateSprint() {
+    if (CVarGetInteger(CVAR_SPRINT_DUMP, 0)) {
+        RecordRunDump();
+    } else if (!sDumpFrames.empty()) {
+        sDumpFrames.clear();
+        sDumpHeaderDone = false;
+    }
     if (gPlayState == nullptr || !SprintEnabled()) {
         ClearSprint();
         return;
@@ -123,8 +188,8 @@ extern "C" s16 Sprint_GetArmBend(Player* player) {
 
 static void RegisterSprint() {
     ClearSprint();
-    COND_HOOK(OnPlayerUpdate, SprintEnabled(), UpdateSprint);
+    COND_HOOK(OnPlayerUpdate, SprintEnabled() || CVarGetInteger(CVAR_SPRINT_DUMP, 0), UpdateSprint);
     COND_HOOK(OnPlayDestroy, true, ClearSprint);
 }
 
-static RegisterShipInitFunc initFunc(RegisterSprint, { CVAR_SPRINT });
+static RegisterShipInitFunc initFunc(RegisterSprint, { CVAR_SPRINT, CVAR_SPRINT_DUMP });
