@@ -966,15 +966,6 @@ void SohMenu::AddMenuSettings() {
         .Options(ComboboxOptions().DefaultIndex(0).ComboMap(touchSprintModes).Tooltip(
             "Toggle: tap once to start sprinting; it stops when you stop moving or tap again. "
             "Hold: sprint only while the button is held."));
-    AddWidget(path,"Record Run Data (Debug)",WIDGET_CVAR_CHECKBOX)
-        .CVar(CVAR_ENHANCEMENT("SprintDump"))
-        .PreFunc([](WidgetInfo& info) {
-            info.isHidden = CVarGetInteger(CVAR_SETTING("TouchControls.Style"),0) == 0 ||
-                            !CVarGetInteger(CVAR_ENHANCEMENT("Sprint"), 0);
-        })
-        .Options(CheckboxOptions().Tooltip(
-            "Turn on, then run in a straight line on flat ground for about 5 seconds. Writes sprint_dump.txt "
-            "to your SOHR folder and turns itself off."));
     static const std::map<int32_t,const char*> touchVaultModes = {{0,"Automatic"},{1,"Manual"}};
     AddWidget(path,"Vaulting Mode",WIDGET_CVAR_COMBOBOX)
         .CVar(CVAR_ENHANCEMENT("ManualJumpVaultMode"))

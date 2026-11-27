@@ -13,6 +13,7 @@
 
 #include <stdlib.h>
 #include <libultraship/bridge/consolevariablebridge.h>
+#include "soh/Enhancements/Sprint/Sprint.h"
 
 typedef struct {
     /* 0x00 */ u8 flag;
@@ -1336,6 +1337,8 @@ s32 Player_OverrideLimbDrawGameplayCommon(PlayState* play, s32 limbIndex, Gfx** 
             rot->x += this->headLimbRot.z;
             rot->y -= this->headLimbRot.y;
             rot->z += this->headLimbRot.x;
+            // Sprint: keep the head looking ahead while the torso leans (pitch is rot->z, positive = down).
+            rot->z -= (s16)(Sprint_GetPose(this) * SPRINT_HEAD_PITCH);
         } else if (limbIndex == PLAYER_LIMB_L_HAND) {
             if (CVarGetInteger(CVAR_COSMETIC("Link.SwordScale.Changed"), 0)) {
                 f32 scale = CVarGetFloat(CVAR_COSMETIC("Link.SwordScale.Value"), 1.0f);
@@ -1358,6 +1361,17 @@ s32 Player_OverrideLimbDrawGameplayCommon(PlayState* play, s32 limbIndex, Gfx** 
             if (this->upperLimbRot.z != 0) {
                 Matrix_RotateZ(this->upperLimbRot.z * (M_PI / 0x8000), MTXMODE_APPLY);
             }
+            // Sprint: lean the torso forward (the upper limb's parent frame is the model frame, +Z is forward).
+            if (Sprint_GetPose(this) > 0.0f) {
+                Matrix_RotateX(Sprint_GetPose(this) * SPRINT_LEAN_RAD, MTXMODE_APPLY);
+            }
+        } else if (limbIndex == PLAYER_LIMB_L_FOREARM || limbIndex == PLAYER_LIMB_R_FOREARM) {
+            // Sprint: bend the elbows (rot->z, negative = more bent; same sign on both arms).
+            rot->z -= (s16)(Sprint_GetPose(this) * SPRINT_ELBOW_BEND);
+        } else if (limbIndex == PLAYER_LIMB_L_SHOULDER) {
+            rot->y -= (s16)(Sprint_GetPose(this) * SPRINT_ELBOW_OUT); // elbow out, away from the body
+        } else if (limbIndex == PLAYER_LIMB_R_SHOULDER) {
+            rot->y += (s16)(Sprint_GetPose(this) * SPRINT_ELBOW_OUT);
         } else if (limbIndex == PLAYER_LIMB_L_THIGH) {
             func_8008F87C(play, this, &this->skelAnime, pos, rot, PLAYER_LIMB_L_THIGH, PLAYER_LIMB_L_SHIN,
                           PLAYER_LIMB_L_FOOT);

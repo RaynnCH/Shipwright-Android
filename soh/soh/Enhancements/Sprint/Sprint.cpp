@@ -1,9 +1,5 @@
 #include <libultraship/bridge.h>
 #include <algorithm>
-#include <cstdio>
-#include <string>
-#include <vector>
-#include <ship/Context.h>
 #include "soh/Enhancements/game-interactor/GameInteractor.h"
 #include "soh/OTRGlobals.h"
 #include "soh/ShipInit.hpp"
@@ -48,74 +44,7 @@ static bool CanSprintNow(Player* player) {
 }
 
 
-// ---- Temporary: records Link's real skeleton and run cycle to SOHR/sprint_dump.txt.
-#define CVAR_SPRINT_DUMP CVAR_ENHANCEMENT("SprintDump")
-static std::vector<std::string> sDumpFrames;
-static bool sDumpHeaderDone = false;
-static std::string sDumpHeader;
-
-static void RecordRunDump() {
-    if (gPlayState == nullptr) {
-        return;
-    }
-    Player* player = GET_PLAYER(gPlayState);
-    SkelAnime* sk = &player->skelAnime;
-    // skelAnime.limbCount counts the root translation slot too; the skeleton itself has limbCount - 1 limbs.
-    const int limbs = sk->limbCount - 1;
-    if (sk->skeleton == nullptr || sk->jointTable == nullptr || limbs <= 0 || limbs > 40) {
-        return;
-    }
-    if (!sDumpHeaderDone) {
-        sDumpHeaderDone = true;
-        char buf[256];
-        snprintf(buf, sizeof(buf), "age=%d limbs=%d\n", (int)gSaveContext.linkAge, limbs);
-        sDumpHeader = buf;
-        for (int i = 0; i < limbs; i++) {
-            StandardLimb* limb = (StandardLimb*)SEGMENTED_TO_VIRTUAL(sk->skeleton[i]);
-            if (limb == nullptr) {
-                continue;
-            }
-            snprintf(buf, sizeof(buf), "limb %d pos %d %d %d child %d sibling %d\n", i, (int)limb->jointPos.x,
-                     (int)limb->jointPos.y, (int)limb->jointPos.z, (int)limb->child, (int)limb->sibling);
-            sDumpHeader += buf;
-        }
-    }
-    if (player->linearVelocity < 4.0f || (player->actor.bgCheckFlags & BGCHECKFLAG_GROUND) == 0) {
-        return;
-    }
-    std::string line;
-    char buf[160];
-    snprintf(buf, sizeof(buf), "frame len=%.1f cur=%.2f speed=%.2f vel=%.2f joints=", sk->animLength, sk->curFrame,
-             sk->playSpeed, player->linearVelocity);
-    line = buf;
-    for (int i = 0; i < sk->limbCount; i++) {
-        snprintf(buf, sizeof(buf), "%d,%d,%d;", (int)sk->jointTable[i].x, (int)sk->jointTable[i].y,
-                 (int)sk->jointTable[i].z);
-        line += buf;
-    }
-    sDumpFrames.push_back(line + "\n");
-    if (sDumpFrames.size() >= 240) {
-        std::string path = Ship::Context::GetPathRelativeToAppDirectory("sprint_dump.txt");
-        if (FILE* f = fopen(path.c_str(), "w")) {
-            fputs(sDumpHeader.c_str(), f);
-            for (const auto& l : sDumpFrames) {
-                fputs(l.c_str(), f);
-            }
-            fclose(f);
-        }
-        sDumpFrames.clear();
-        sDumpHeaderDone = false;
-        CVarSetInteger(CVAR_SPRINT_DUMP, 0);
-    }
-}
-
 static void UpdateSprint() {
-    if (CVarGetInteger(CVAR_SPRINT_DUMP, 0)) {
-        RecordRunDump();
-    } else if (!sDumpFrames.empty()) {
-        sDumpFrames.clear();
-        sDumpHeaderDone = false;
-    }
     if (gPlayState == nullptr || !SprintEnabled()) {
         ClearSprint();
         return;
@@ -167,6 +96,13 @@ extern "C" float Sprint_GetRunFactor(Player* player) {
     return 1.0f + (kSprintSpeed - 1.0f) * t;
 }
 
+extern "C" float Sprint_GetPose(Player* player) {
+    if (sRamp <= 0.0f || gPlayState == nullptr || player != GET_PLAYER(gPlayState)) {
+        return 0.0f;
+    }
+    return sRamp * sRamp * (3.0f - 2.0f * sRamp);
+}
+
 extern "C" float Sprint_GetAnimFactor(Player* player) {
     if (sRamp <= 0.0f || player != GET_PLAYER(gPlayState)) {
         return 1.0f;
@@ -179,8 +115,8 @@ extern "C" float Sprint_GetAnimFactor(Player* player) {
 
 static void RegisterSprint() {
     ClearSprint();
-    COND_HOOK(OnPlayerUpdate, SprintEnabled() || CVarGetInteger(CVAR_SPRINT_DUMP, 0), UpdateSprint);
+    COND_HOOK(OnPlayerUpdate, SprintEnabled(), UpdateSprint);
     COND_HOOK(OnPlayDestroy, true, ClearSprint);
 }
 
-static RegisterShipInitFunc initFunc(RegisterSprint, { CVAR_SPRINT, CVAR_SPRINT_DUMP });
+static RegisterShipInitFunc initFunc(RegisterSprint, { CVAR_SPRINT });
