@@ -21,6 +21,7 @@
 #include "soh/Notification/Notification.h"
 #include "soh/Enhancements/TimeDisplay/TimeDisplay.h"
 #include "soh/Enhancements/ThirdPersonAim/ThirdPersonAimReticle.h"
+#include "soh/Enhancements/RemakeControls/RemakeControls.h"
 #include "soh/Enhancements/mod_menu.h"
 #include "soh/Network/Anchor/Anchor.h"
 #include "soh/Enhancements/audio/AudioEditor.h"
@@ -129,6 +130,10 @@ class ThirdPersonAimReticleWindow final : public Ship::GuiWindow {
         const bool enabled = CVarGetInteger(CVAR_ENHANCEMENT("ThirdPersonAim"), 1) != 0 &&
                              CVarGetInteger(CVAR_ENHANCEMENT("ThirdPersonAimReticle"), 1) != 0;
         const bool menuOpen = mSohMenu != nullptr && mSohMenu->IsVisible();
+        // Item carousel open: hide the reticle immediately so it does not draw over the carousel.
+        if (RemakeControls_IsCarouselOpen()) {
+            return;
+        }
         const bool aiming = enabled && !menuOpen && Player_IsThirdPersonAiming() != 0;
         int ammo = -1;
         int score = -1;
@@ -146,6 +151,25 @@ class ThirdPersonAimReticleWindow final : public Ship::GuiWindow {
 };
 
 std::shared_ptr<ThirdPersonAimReticleWindow> mThirdPersonAimReticleWindow;
+
+// Invisible, always-running window: Draw() never calls ImGui::Begin. It ignores IsVisible() on purpose so the item
+// carousel can never be hidden by closing a window. The overlay hides itself based on the game state.
+class RemakeControlsWindow final : public Ship::GuiWindow {
+  public:
+    using Ship::GuiWindow::GuiWindow;
+    void Draw() override {
+        DrawElement();
+    }
+    void InitElement() override {
+    }
+    void UpdateElement() override {
+    }
+    void DrawElement() override {
+        RemakeControlsOverlay_Draw();
+    }
+};
+
+std::shared_ptr<RemakeControlsWindow> mRemakeControlsWindow;
 
 UIWidgets::Colors GetMenuThemeColor() {
     return mSohMenu->GetMenuThemeColor();
@@ -189,6 +213,7 @@ std::vector<std::shared_ptr<Ship::GuiWindow>> GetAllGuiWindows() {
         mTimeDisplayWindow,
         mAnchorRoomWindow,
         mThirdPersonAimReticleWindow,
+        mRemakeControlsWindow,
         // Registered outside SohGui.
         gui->GetGuiWindow("Configure Controller"),
         gui->GetGuiWindow("Console"),
@@ -310,6 +335,10 @@ void SetupGuiElements() {
                                                                                  "Third Person Aim Reticle");
     gui->AddGuiWindow(mThirdPersonAimReticleWindow);
     mThirdPersonAimReticleWindow->Show();
+    mRemakeControlsWindow =
+        std::make_shared<RemakeControlsWindow>(CVAR_WINDOW("RemakeControlsOverlay"), "Remake Controls Overlay");
+    gui->AddGuiWindow(mRemakeControlsWindow);
+    mRemakeControlsWindow->Show();
 }
 
 void Destroy() {
@@ -348,6 +377,7 @@ void Destroy() {
     mTimeDisplayWindow = nullptr;
     mAnchorRoomWindow = nullptr;
     mThirdPersonAimReticleWindow = nullptr;
+    mRemakeControlsWindow = nullptr;
 }
 
 void RegisterPopup(std::string title, std::string message, std::string button1, std::string button2,

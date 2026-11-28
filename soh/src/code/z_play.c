@@ -651,10 +651,20 @@ void Play_Init(GameState* thisx) {
 #endif
 }
 
+// Remake controls (SoH): implemented in RemakeControls.cpp
+s32 RemakeControls_UpdateCarousel(PlayState* play, s32 isPaused);
+
+// Remake controls (SoH): is 1 while the item carousel freezes the world. Interface_Draw (z_parameter.c) reads it to
+// stop the on-screen timers (Dampe race, timed quests, etc.).
+s32 gRemakeCarouselFrozen = 0;
+
 void Play_Update(PlayState* play) {
     Input* input = play->state.input;
     s32 isPaused;
+    s32 remakeFrozen = 0; // Remake controls (SoH): item carousel open
     s32 pad1;
+
+    gRemakeCarouselFrozen = 0;
 
     if ((SREG(1) < 0) || (DREG(0) != 0)) {
         SREG(1) = 0;
@@ -1112,6 +1122,13 @@ void Play_Update(PlayState* play) {
             PLAY_LOG(3551);
             isPaused = (play->pauseCtx.state != 0) || (play->pauseCtx.debugState != 0);
 
+            // Remake controls (SoH): o carrossel de itens pausa o mundo reaproveitando o isPaused
+            if (RemakeControls_UpdateCarousel(play, isPaused)) {
+                isPaused = true;
+                remakeFrozen = 1;
+                gRemakeCarouselFrozen = 1;
+            }
+
             PLAY_LOG(3555);
             AnimationContext_Reset(&play->animationCtx);
 
@@ -1235,7 +1252,10 @@ void Play_Update(PlayState* play) {
             PLAY_LOG(3737);
 
             PLAY_LOG(3742);
-            Interface_Update(play);
+            // Remake controls (SoH): com o carrossel aberto, timers, magia e HUD ficam parados
+            if (!remakeFrozen) {
+                Interface_Update(play);
+            }
 
             PLAY_LOG(3765);
             AnimationContext_Update(play, &play->animationCtx);
@@ -1280,8 +1300,11 @@ skip:
     }
 
     PLAY_LOG(3816);
-    Environment_Update(play, &play->envCtx, &play->lightCtx, &play->pauseCtx, &play->msgCtx, &play->gameOverCtx,
-                       play->state.gfxCtx);
+    // Remake controls (SoH): com o carrossel aberto, o ciclo de dia e noite fica parado
+    if (!remakeFrozen) {
+        Environment_Update(play, &play->envCtx, &play->lightCtx, &play->pauseCtx, &play->msgCtx, &play->gameOverCtx,
+                           play->state.gfxCtx);
+    }
 }
 
 void Play_DrawOverlayElements(PlayState* play) {

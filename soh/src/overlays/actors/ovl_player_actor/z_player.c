@@ -401,6 +401,12 @@ static s32 sSavedCurrentMask;
 static Vec3f sInteractWallCheckResult;
 static Input* sControlInput;
 
+// Remake controls (SoH): implemented in RemakeControls.cpp
+void RemakeControls_ModifyPlayerInput(Input* input);
+int RemakeControls_DpadEquipsActive(void);
+int RemakeControls_ConsumeJumpPress(PlayState* play);
+static s32 Player_TryRemakeJump(Player* this, PlayState* play);
+
 // .data
 
 static u8 sUpperBodyLimbCopyMap[PLAYER_LIMB_MAX] = {
@@ -2473,7 +2479,7 @@ extern u8 BombArrows_GetEffectiveButtonItem(s16 buttonIndex, u8 item);
 
 s32 Player_GetItemOnButton(PlayState* play, s32 index) {
     s32 item = ITEM_NONE;
-    if (index >= ((CVarGetInteger(CVAR_ENHANCEMENT("DpadEquips"), 0) != 0) ? 8 : 4)) {
+    if (index >= ((RemakeControls_DpadEquipsActive() != 0) ? 8 : 4)) {
         return ITEM_NONE;
     } else if (play->bombchuBowlingStatus != 0) {
         return (play->bombchuBowlingStatus > 0) ? ITEM_BOMBCHU : ITEM_NONE;
@@ -2515,7 +2521,7 @@ void Player_ProcessItemButtons(Player* this, PlayState* play) {
         maskItemAction = this->currentMask - 1 + PLAYER_IA_MASK_KEATON;
 
         bool hasOnDpad = false;
-        if (CVarGetInteger(CVAR_ENHANCEMENT("DpadEquips"), 0) != 0) {
+        if (RemakeControls_DpadEquipsActive() != 0) {
             for (int buttonIndex = 0; buttonIndex < 4; buttonIndex++) {
                 hasOnDpad |= Player_ItemIsItemAction(DPAD_ITEM(buttonIndex), maskItemAction);
             }
@@ -2530,7 +2536,7 @@ void Player_ProcessItemButtons(Player* this, PlayState* play) {
     if (!(this->stateFlags1 & (PLAYER_STATE1_CARRYING_ACTOR | PLAYER_STATE1_IN_CUTSCENE)) && !func_8008F128(this)) {
         if (this->itemAction >= PLAYER_IA_FISHING_POLE) {
             bool hasOnDpad = false;
-            if (CVarGetInteger(CVAR_ENHANCEMENT("DpadEquips"), 0) != 0) {
+            if (RemakeControls_DpadEquipsActive() != 0) {
                 for (int buttonIndex = 0; buttonIndex < 4; buttonIndex++) {
                     hasOnDpad |= Player_ItemIsInUse(this, Player_GetItemOnButton(play, buttonIndex + 4));
                 }
@@ -2946,7 +2952,7 @@ int func_80834E44(PlayState* play) {
 
 int func_80834E7C(PlayState* play) {
     u16 buttonsToCheck = BTN_A | BTN_B | BTN_CUP | BTN_CLEFT | BTN_CRIGHT | BTN_CDOWN;
-    if (CVarGetInteger(CVAR_ENHANCEMENT("DpadEquips"), 0) != 0) {
+    if (RemakeControls_DpadEquipsActive() != 0) {
         buttonsToCheck |= BTN_DUP | BTN_DDOWN | BTN_DLEFT | BTN_DRIGHT;
     }
     return (play->shootingGalleryStatus != 0) &&
@@ -4176,6 +4182,15 @@ static s32 (*sActionHandlerFuncs[])(Player* this, PlayState* play) = {
     Player_ActionHandler_13,   // PLAYER_ACTION_HANDLER_13
 };
 
+// Pulo do modo moderno (X / Shift): só é tentado nas listas de ações em terra (andando, parado, mirando).
+// Ficam de fora a lista 10, a lista 11 (na água) e a de girar no lugar.
+static s32 Player_IsRemakeJumpHandlerList(s8* actionHandlerList) {
+    return (actionHandlerList == sActionHandlerListIdle) || (actionHandlerList == sActionHandlerList1) ||
+           (actionHandlerList == sActionHandlerList2) || (actionHandlerList == sActionHandlerList3) ||
+           (actionHandlerList == sActionHandlerList4) || (actionHandlerList == sActionHandlerList5) ||
+           (actionHandlerList == sActionHandlerList8) || (actionHandlerList == sActionHandlerList9);
+}
+
 /**
  * This function processes "Action Handler Lists".
  *
@@ -4215,6 +4230,10 @@ s32 Player_TryActionHandlerList(PlayState* play, Player* this, s8* actionHandler
 
         if (!(this->stateFlags1 & PLAYER_STATE1_START_CHANGING_HELD_ITEM) &&
             (Player_UpperAction_ChangeHeldItem != this->upperActionFunc)) {
+            if (Player_IsRemakeJumpHandlerList(actionHandlerList) && Player_TryRemakeJump(this, play)) {
+                return true;
+            }
+
             // Process all entries in the Action Handler List with a positive index
             while (*actionHandlerList >= 0) {
                 if (sActionHandlerFuncs[*actionHandlerList](this, play)) {
@@ -5701,6 +5720,42 @@ s32 func_8083A4A8(Player* this, PlayState* play) {
 
     func_80838940(this, anim, temp, play, NA_SE_VO_LI_AUTO_JUMP);
     this->av2.actionVar2 = 1;
+
+    return 1;
+}
+
+// Pulo do modo moderno (X / Shift). Reaproveita o salto de corrida do jogo (func_8083A4A8), que escolhe a
+// animação pela velocidade do Link e a altura cresce com ela. Como a altura do jogo vale quase zero com o Link
+// parado ou devagar, há uma velocidade vertical mínima para o pulo sempre sair do chão.
+// REMAKE_JUMP_VELOCITY_SCALE multiplica a altura do jogo (1.0 = original); REMAKE_JUMP_MIN_VELOCITY é o piso.
+// Altura aproximada do pulo = velocidade ao quadrado / 2 (a gravidade do Link é 1.0 por frame).
+#define REMAKE_JUMP_VELOCITY_SCALE 1.0f
+#define REMAKE_JUMP_MIN_VELOCITY 7.0f
+
+static s32 Player_TryRemakeJump(Player* this, PlayState* play) {
+    if (!(this->actor.bgCheckFlags & BGCHECKFLAG_GROUND) ||
+        (this->stateFlags1 & (PLAYER_STATE1_IN_WATER | PLAYER_STATE1_SHIELDING | PLAYER_STATE1_CARRYING_ACTOR |
+                              PLAYER_STATE1_JUMPING)) ||
+        (this->stateFlags2 & PLAYER_STATE2_HOPPING) || (this->meleeWeaponState != 0)) {
+        return 0;
+    }
+
+    // Mesmas restrições de chão do rolamento e do salto lateral (Player_ActionHandler_10)
+    if ((play->roomCtx.curRoom.behaviorType1 == ROOM_BEHAVIOR_TYPE1_2) || (sFloorType == 7) ||
+        (SurfaceType_GetFloorEffect(&play->colCtx, this->actor.floorPoly, this->actor.floorBgId) ==
+         FLOOR_EFFECT_1)) {
+        return 0;
+    }
+
+    if (!RemakeControls_ConsumeJumpPress(play)) {
+        return 0;
+    }
+
+    func_8083A4A8(this, play);
+    this->actor.velocity.y *= REMAKE_JUMP_VELOCITY_SCALE;
+    if (this->actor.velocity.y < (REMAKE_JUMP_MIN_VELOCITY * sWaterSpeedFactor)) {
+        this->actor.velocity.y = REMAKE_JUMP_MIN_VELOCITY * sWaterSpeedFactor;
+    }
 
     return 1;
 }
@@ -7813,7 +7868,7 @@ s32 Player_CanThrowCarriedActor(Player* this, Actor* actor) {
 
 s32 Player_ActionHandler_9(Player* this, PlayState* play) {
     u16 buttonsToCheck = BTN_A | BTN_B | BTN_CLEFT | BTN_CRIGHT | BTN_CDOWN;
-    if (CVarGetInteger(CVAR_ENHANCEMENT("DpadEquips"), 0) != 0) {
+    if (RemakeControls_DpadEquipsActive() != 0) {
         buttonsToCheck |= BTN_DUP | BTN_DDOWN | BTN_DLEFT | BTN_DRIGHT;
     }
     if (GameInteractor_Should(VB_THROW_OR_PUT_DOWN_HELD_ITEM,
@@ -9979,7 +10034,7 @@ void Player_Action_8084411C(Player* this, PlayState* play) {
             Actor* heldActor = this->heldActor;
 
             u16 buttonsToCheck = BTN_A | BTN_B | BTN_CLEFT | BTN_CRIGHT | BTN_CDOWN;
-            if (CVarGetInteger(CVAR_ENHANCEMENT("DpadEquips"), 0) != 0) {
+            if (RemakeControls_DpadEquipsActive() != 0) {
                 buttonsToCheck |= BTN_DUP | BTN_DDOWN | BTN_DLEFT | BTN_DRIGHT;
             }
             if (!func_80835644(play, this, heldActor) && (heldActor->id == ACTOR_EN_NIW) &&
@@ -10801,7 +10856,7 @@ void Player_Action_80846260(Player* this, PlayState* play) {
     }
 
     u16 buttonsToCheck = BTN_A | BTN_B | BTN_CLEFT | BTN_CRIGHT | BTN_CDOWN;
-    if (CVarGetInteger(CVAR_ENHANCEMENT("DpadEquips"), 0) != 0) {
+    if (RemakeControls_DpadEquipsActive() != 0) {
         buttonsToCheck |= BTN_DUP | BTN_DDOWN | BTN_DLEFT | BTN_DRIGHT;
     }
     if (this->av2.actionVar2 == 0) {
@@ -12567,6 +12622,7 @@ void Player_Update(Actor* thisx, PlayState* play) {
                 input.cur.button &= ~(BTN_A | BTN_B | BTN_CUP);
                 input.press.button &= ~(BTN_A | BTN_B | BTN_CUP);
             }
+            RemakeControls_ModifyPlayerInput(&input);
         }
 
         if (CVarGetFloat(CVAR_CHEAT("SpeedModifier.Value"), 1.0f) != 1.0f &&
@@ -13230,7 +13286,7 @@ void Player_Action_8084B1D8(Player* this, PlayState* play) {
     }
 
     u16 buttonsToCheck = BTN_A | BTN_B | BTN_R | BTN_CUP | BTN_CLEFT | BTN_CRIGHT | BTN_CDOWN;
-    if (CVarGetInteger(CVAR_ENHANCEMENT("DpadEquips"), 0) != 0) {
+    if (RemakeControls_DpadEquipsActive() != 0) {
         buttonsToCheck |= BTN_DUP | BTN_DDOWN | BTN_DLEFT | BTN_DRIGHT;
     }
     if ((this->csAction != 0) || (this->unk_6AD == 0) || (this->unk_6AD >= 4) || Player_UpdateHostileLockOn(this) ||

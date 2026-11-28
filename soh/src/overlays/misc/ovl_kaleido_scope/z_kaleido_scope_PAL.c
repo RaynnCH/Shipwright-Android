@@ -24,6 +24,11 @@
 #include "soh/Enhancements/kaleido.h"
 #include <soh_assets.h>
 #include <libultraship/bridge/consolevariablebridge.h>
+#include "z_kaleido_map_sidebar_tex.h"
+
+// Definidas em RemakeControls.cpp (ligação C)
+int RemakeControls_IsEnabled(void);
+int RemakeControls_DpadEquipsActive(void);
 
 static void* sEquipmentFRATexs[] = {
     gPauseEquipment00FRATex, gPauseEquipment01Tex, gPauseEquipment02Tex, gPauseEquipment03Tex, gPauseEquipment04Tex,
@@ -3145,20 +3150,22 @@ void KaleidoScope_InitVertices(PlayState* play, GraphicsContext* gfxCtx) {
 
     for (phi_t3 = 1; phi_t3 < ARRAY_COUNT(gSaveContext.equips.buttonItems); phi_t3++, phi_t2 += 4) {
         if (gSaveContext.equips.cButtonSlots[phi_t3 - 1] != ITEM_NONE &&
-            ((phi_t3 < 4) || CVarGetInteger(CVAR_ENHANCEMENT("DpadEquips"), 0))) {
+            ((phi_t3 < 4) || RemakeControls_DpadEquipsActive())) {
             phi_t4 = gSaveContext.equips.cButtonSlots[phi_t3 - 1] * 4;
 
             pauseCtx->itemVtx[phi_t2 + 0].v.ob[0] = pauseCtx->itemVtx[phi_t2 + 2].v.ob[0] =
                 pauseCtx->itemVtx[phi_t4].v.ob[0] - 2;
 
+            phi_t1 = pauseCtx->itemVtx[phi_t4 + 1].v.ob[0] - pauseCtx->itemVtx[phi_t4].v.ob[0] + 4;
+
             pauseCtx->itemVtx[phi_t2 + 1].v.ob[0] = pauseCtx->itemVtx[phi_t2 + 3].v.ob[0] =
-                pauseCtx->itemVtx[phi_t2 + 0].v.ob[0] + 32;
+                pauseCtx->itemVtx[phi_t2 + 0].v.ob[0] + phi_t1;
 
             pauseCtx->itemVtx[phi_t2 + 0].v.ob[1] = pauseCtx->itemVtx[phi_t2 + 1].v.ob[1] =
                 pauseCtx->itemVtx[phi_t4].v.ob[1] + 2;
 
             pauseCtx->itemVtx[phi_t2 + 2].v.ob[1] = pauseCtx->itemVtx[phi_t2 + 3].v.ob[1] =
-                pauseCtx->itemVtx[phi_t2 + 0].v.ob[1] - 32;
+                pauseCtx->itemVtx[phi_t2 + 0].v.ob[1] - phi_t1;
 
             pauseCtx->itemVtx[phi_t2 + 0].v.ob[2] = pauseCtx->itemVtx[phi_t2 + 1].v.ob[2] =
                 pauseCtx->itemVtx[phi_t2 + 2].v.ob[2] = pauseCtx->itemVtx[phi_t2 + 3].v.ob[2] = 0;

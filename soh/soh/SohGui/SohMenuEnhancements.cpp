@@ -2164,6 +2164,28 @@ void SohMenu::AddMenuEnhancements() {
     path.sidebarName = "Addon Gameplay";
     AddSidebarEntry("Enhancements", path.sidebarName, 2);
     path.column = SECTION_COLUMN_1;
+    AddWidget(path, "Item Controls", WIDGET_SEPARATOR_TEXT);
+    AddWidget(path, "Modern Item Switching", WIDGET_CVAR_CHECKBOX)
+        .CVar(CVAR_ENHANCEMENT("RemakeControls"))
+        .RaceDisable(false)
+        .Options(CheckboxOptions().DefaultValue(false).Tooltip(
+            "Remake-style item controls: the D-Pad equips items, ZR uses the focused item shown in the top-right "
+            "corner, and holding L or R pauses the game and opens the item carousel. The C buttons are no longer "
+            "drawn on the HUD. The buttons read the game's C buttons: ZR is C-Up, L is C-Left, R is C-Right and "
+            "X is C-Down, so bind them in the controller settings. Turn this off to get the original behavior back."));
+    AddWidget(path, "Jump (C-Down)", WIDGET_CVAR_CHECKBOX)
+        .CVar(CVAR_ENHANCEMENT("RemakeControlsJump"))
+        .RaceDisable(false)
+        .PreFunc([](WidgetInfo& info) { info.isHidden = !CVarGetInteger(CVAR_ENHANCEMENT("RemakeControls"), 0); })
+        .Options(CheckboxOptions().DefaultValue(true).Tooltip(
+            "Pressing the button bound to C-Down makes Link jump, like the remake. Not available while the shield "
+            "is raised, in water, or while carrying something."));
+    AddWidget(path, "Sort Carousel By Type", WIDGET_CVAR_CHECKBOX)
+        .CVar(CVAR_ENHANCEMENT("RemakeControlsSortByType"))
+        .RaceDisable(false)
+        .PreFunc([](WidgetInfo& info) { info.isHidden = !CVarGetInteger(CVAR_ENHANCEMENT("RemakeControls"), 0); })
+        .Options(CheckboxOptions().Tooltip("Groups the item carousel by item type instead of inventory order."));
+
     AddWidget(path, "Third Person Aim", WIDGET_SEPARATOR_TEXT);
     AddWidget(path, "Third Person Aim", WIDGET_CVAR_CHECKBOX)
         .CVar(CVAR_ENHANCEMENT("ThirdPersonAim"))
