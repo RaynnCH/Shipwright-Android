@@ -15,7 +15,7 @@ extern PlayState* gPlayState;
 #define CVAR_SPRINT CVAR_ENHANCEMENT("Sprint")
 #define CVAR_SPRINT_MODE CVAR_ENHANCEMENT("SprintMode") // 0 = toggle, 1 = hold
 constexpr float kSprintSpeed = 1.3f;     // fixed 130% top speed
-constexpr float kSprintRampFrames = 20.0f; // wind-up: frames to reach full sprint speed
+constexpr float kSprintRampFrames = 10.0f; // wind-up: frames to reach full sprint speed
 
 static bool sToggled = false;
 static bool sActive = false;
