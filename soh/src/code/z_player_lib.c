@@ -1370,14 +1370,20 @@ s32 Player_OverrideLimbDrawGameplayCommon(PlayState* play, s32 limbIndex, Gfx** 
             rot->z -= (s16)(Sprint_GetPose(this) * SPRINT_ELBOW_BEND);
         } else if (limbIndex == PLAYER_LIMB_L_SHOULDER) {
             rot->y -= (s16)(Sprint_GetPose(this) * SPRINT_ELBOW_OUT); // elbow out, away from the body
+            rot->z = Sprint_Widen(rot->z, SPRINT_MEAN_SHOULDER_L_Z, 1.0f + (SPRINT_ARM_SWING - 1.0f) * Sprint_GetPose(this));
+            rot->x = Sprint_Widen(rot->x, SPRINT_MEAN_SHOULDER_L_X, 1.0f + (SPRINT_ARM_SWING - 1.0f) * Sprint_GetPose(this));
         } else if (limbIndex == PLAYER_LIMB_R_SHOULDER) {
             rot->y += (s16)(Sprint_GetPose(this) * SPRINT_ELBOW_OUT);
+            rot->z = Sprint_Widen(rot->z, SPRINT_MEAN_SHOULDER_R_Z, 1.0f + (SPRINT_ARM_SWING - 1.0f) * Sprint_GetPose(this));
+            rot->x = Sprint_Widen(rot->x, SPRINT_MEAN_SHOULDER_R_X, 1.0f + (SPRINT_ARM_SWING - 1.0f) * Sprint_GetPose(this));
         } else if (limbIndex == PLAYER_LIMB_L_THIGH) {
             func_8008F87C(play, this, &this->skelAnime, pos, rot, PLAYER_LIMB_L_THIGH, PLAYER_LIMB_L_SHIN,
                           PLAYER_LIMB_L_FOOT);
+            rot->z = Sprint_Widen(rot->z, SPRINT_MEAN_THIGH_L_Z, 1.0f + (SPRINT_STRIDE - 1.0f) * Sprint_GetPose(this));
         } else if (limbIndex == PLAYER_LIMB_R_THIGH) {
             func_8008F87C(play, this, &this->skelAnime, pos, rot, PLAYER_LIMB_R_THIGH, PLAYER_LIMB_R_SHIN,
                           PLAYER_LIMB_R_FOOT);
+            rot->z = Sprint_Widen(rot->z, SPRINT_MEAN_THIGH_R_Z, 1.0f + (SPRINT_STRIDE - 1.0f) * Sprint_GetPose(this));
             return false;
         } else {
             return false;
