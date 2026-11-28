@@ -18,6 +18,7 @@
 #include "overlays/actors/ovl_En_Elf/z_en_elf.h"
 #include "overlays/actors/ovl_En_Fish/z_en_fish.h"
 #include "overlays/actors/ovl_En_Horse/z_en_horse.h"
+#include "overlays/actors/ovl_En_Syateki_Itm/z_en_syateki_itm.h"
 #include "overlays/effects/ovl_Effect_Ss_Fhg_Flash/z_eff_ss_fhg_flash.h"
 #include "overlays/misc/ovl_kaleido_scope/z_kaleido_scope.h"
 #include "objects/gameplay_keep/gameplay_keep.h"
@@ -5879,6 +5880,293 @@ void func_8083AA10(Player* this, PlayState* play) {
     }
 }
 
+// #region SOH [Enhancement] Third-person aiming for slingshot and bow (Remake / BOTW style)
+// Camera stays behind Link (free camera driven by right stick / mouse) and Link's aim follows the camera.
+extern PlayState* gPlayState;
+
+static s32 Player_UseThirdPersonAim(Player* this) {
+    // Shooting gallery (Market / Kakariko): keep the vanilla aiming there, the third-person camera
+    // locks up in that room. Set ThirdPersonAimGallery to 1 to force third-person aim in the gallery.
+    if ((gPlayState != NULL) && (gPlayState->shootingGalleryStatus != 0) &&
+        !CVarGetInteger(CVAR_ENHANCEMENT("ThirdPersonAimGallery"), 0)) {
+        return 0;
+    }
+
+    return CVarGetInteger(CVAR_ENHANCEMENT("ThirdPersonAim"), 1) && func_8002DD6C(this) &&
+           !(this->stateFlags1 & PLAYER_STATE1_ON_HORSE);
+}
+
+// SOH [Enhancement] First-person aim assist: the places where the game keeps its own first-person aim
+// (shooting gallery and aiming a bow from horseback) also get the on-screen reticle and the shot correction.
+// Needs ThirdPersonAim on (master switch); ThirdPersonAimFirstPerson turns just this part off.
+static s32 Player_UseFirstPersonAimAssist(Player* this) {
+    if (!CVarGetInteger(CVAR_ENHANCEMENT("ThirdPersonAim"), 1) ||
+        !CVarGetInteger(CVAR_ENHANCEMENT("ThirdPersonAimFirstPerson"), 1) || !func_8002DD6C(this) ||
+        Player_UseThirdPersonAim(this)) {
+        return 0;
+    }
+
+    if ((gPlayState != NULL) && (gPlayState->shootingGalleryStatus != 0)) {
+        return 1;
+    }
+
+    return (this->stateFlags1 & PLAYER_STATE1_ON_HORSE) ? 1 : 0;
+}
+
+// SOH [Enhancement] Third-person aim: read by the on-screen reticle (soh/Enhancements/ThirdPersonAim).
+// True while Link is aiming with the third-person aim, and never while the game is paused.
+extern PlayState* gPlayState;
+
+u8 Player_IsThirdPersonAiming(void) {
+    Player* player;
+
+    if ((gPlayState == NULL) || (gPlayState->pauseCtx.state != 0)) {
+        return 0;
+    }
+
+    player = GET_PLAYER(gPlayState);
+
+    return (player != NULL) && (Player_UseThirdPersonAim(player) || Player_UseFirstPersonAimAssist(player)) &&
+           (player->unk_6AD == 2) && (player->csAction == 0);
+}
+
+// SOH [Enhancement] Third-person aim: ammo shown next to the reticle (soh/Enhancements/ThirdPersonAim).
+// Same numbers the HUD shows on the C button: arrows / seeds, the shots left in the shooting gallery or the arrows
+// left in the horseback archery. Returns -1 when there is nothing to show (hookshot, boomerang...).
+s32 Player_GetThirdPersonAimAmmo(void) {
+    Player* player;
+    s32 item;
+    s32 type;
+    s32 ammo;
+
+    if (gPlayState == NULL) {
+        return -1;
+    }
+
+    player = GET_PLAYER(gPlayState);
+    if ((player == NULL) || Player_HoldsHookshot(player) || !func_8002DD6C(player)) {
+        return -1;
+    }
+
+    ammo = func_80834380(gPlayState, player, &item, &type);
+    if ((gSaveContext.minigameState != 1) && (gPlayState->shootingGalleryStatus > 0)) {
+        // the HUD shows one less than the internal counter
+        ammo = (gPlayState->shootingGalleryStatus > 1) ? (gPlayState->shootingGalleryStatus - 1) : 0;
+    }
+
+    return (ammo < 0) ? 0 : ammo;
+}
+
+// SOH [Enhancement] Third-person aim: counter shown under the ammo in the minigames.
+// Returns the value, or -1 for none. kind: 1 = targets hit in the shooting gallery, 2 = points in the horseback archery.
+s32 Player_GetThirdPersonAimScore(s32* kind) {
+    Actor* actor;
+    s32 i;
+
+    *kind = 0;
+    if (gPlayState == NULL) {
+        return -1;
+    }
+
+    if (gSaveContext.minigameState == 1) {
+        *kind = 2;
+        return gSaveContext.minigameScore;
+    }
+
+    if (gPlayState->shootingGalleryStatus != 0) {
+        for (i = 0; i < ACTORCAT_MAX; i++) {
+            for (actor = gPlayState->actorCtx.actorLists[i].head; actor != NULL; actor = actor->next) {
+                if (actor->id == ACTOR_EN_SYATEKI_ITM) {
+                    *kind = 1;
+                    return ((EnSyatekiItm*)actor)->hitCount;
+                }
+            }
+        }
+    }
+
+    return -1;
+}
+
+// SOH [Enhancement] Third-person aim: makes the shot land on the point under the reticle (center of the screen).
+// The camera sits over Link's shoulder, so a shot fired parallel to the camera lands to the right of the reticle.
+// This casts a ray from the camera through the center of the screen, finds what it hits (level geometry, or the
+// first enemy / targetable actor close to the ray) and aims from where the shot starts toward that point.
+// Returns 0 when there is nothing to correct, otherwise the yaw / pitch (focus.rot convention) that sends the shot to
+// the point under the reticle, never turning more than maxDeviation away from the camera direction.
+static s32 Player_AimConvergeAngles(Player* this, PlayState* play, Camera* aimCam, s16 maxDeviation, s16* outYaw,
+                                    s16* outPitch) {
+    static const u8 sCategories[] = { ACTORCAT_ENEMY, ACTORCAT_BOSS, ACTORCAT_PROP, ACTORCAT_NPC, ACTORCAT_MISC };
+    Vec3f eye = aimCam->eye;
+    Vec3f dir;
+    Vec3f origin;
+    Vec3f rayStart;
+    Vec3f rayEnd;
+    Vec3f hit;
+    Vec3f target;
+    CollisionPoly* poly;
+    s32 bgId;
+    f32 range;
+    f32 len;
+    f32 tMin;
+    f32 tBest;
+    s16 camYaw;
+    s16 camPitch;
+    s16 yaw;
+    s16 pitch;
+    s32 i;
+    Actor* actor;
+
+    dir.x = aimCam->at.x - eye.x;
+    dir.y = aimCam->at.y - eye.y;
+    dir.z = aimCam->at.z - eye.z;
+    len = sqrtf(SQ(dir.x) + SQ(dir.y) + SQ(dir.z));
+    if (len < 1.0f) {
+        return 0;
+    }
+    dir.x /= len;
+    dir.y /= len;
+    dir.z /= len;
+
+    // Where the shot starts: the arrow / seed Link is holding, or his hand while nothing is loaded yet.
+    if (this->heldActor != NULL) {
+        origin = this->heldActor->world.pos;
+    } else {
+        origin = this->bodyPartsPos[PLAYER_BODYPART_R_HAND];
+    }
+
+    range = CVarGetFloat(CVAR_ENHANCEMENT("ThirdPersonAimParallaxRange"), 3000.0f);
+    if (range < 200.0f) {
+        range = 200.0f;
+    }
+
+    // Only things in front of where the shot starts count (the camera is behind Link).
+    tMin = ((origin.x - eye.x) * dir.x) + ((origin.y - eye.y) * dir.y) + ((origin.z - eye.z) * dir.z) + 30.0f;
+    if (tMin < 0.0f) {
+        tMin = 0.0f;
+    }
+    if (tMin >= range) {
+        return 0;
+    }
+    tBest = range;
+
+    // Level geometry: same test that arrows and seeds use to hit walls and floors.
+    rayStart.x = eye.x + dir.x * tMin;
+    rayStart.y = eye.y + dir.y * tMin;
+    rayStart.z = eye.z + dir.z * tMin;
+    rayEnd.x = eye.x + dir.x * range;
+    rayEnd.y = eye.y + dir.y * range;
+    rayEnd.z = eye.z + dir.z * range;
+    if (BgCheck_ProjectileLineTest(&play->colCtx, &rayStart, &rayEnd, &hit, &poly, true, true, true, true, &bgId)) {
+        tBest = sqrtf(SQ(hit.x - eye.x) + SQ(hit.y - eye.y) + SQ(hit.z - eye.z));
+    }
+
+    // Actors: enemies and bosses always, anything else only if the game lets Link target it.
+    for (i = 0; i < ARRAY_COUNT(sCategories); i++) {
+        for (actor = play->actorCtx.actorLists[sCategories[i]].head; actor != NULL; actor = actor->next) {
+            f32 dx;
+            f32 dy;
+            f32 dz;
+            f32 t;
+
+            if ((actor == &this->actor) || (actor == this->heldActor) || (actor->update == NULL)) {
+                continue;
+            }
+            if ((i >= 2) && !(actor->flags & ACTOR_FLAG_ATTENTION_ENABLED)) {
+                continue;
+            }
+
+            dx = actor->focus.pos.x - eye.x;
+            dy = actor->focus.pos.y - eye.y;
+            dz = actor->focus.pos.z - eye.z;
+            t = (dx * dir.x) + (dy * dir.y) + (dz * dir.z);
+            if ((t < tMin) || (t >= tBest)) {
+                continue;
+            }
+            // closest the ray gets to the actor's focus point must be within ~30 units
+            if ((SQ(dx) + SQ(dy) + SQ(dz) - SQ(t)) < SQ(30.0f)) {
+                tBest = t;
+            }
+        }
+    }
+
+    target.x = eye.x + dir.x * tBest;
+    target.y = eye.y + dir.y * tBest;
+    target.z = eye.z + dir.z * tBest;
+
+    // Same angle convention as the rest of this file: focus.rot.x > 0 aims down.
+    camYaw = Camera_GetCamDirYaw(aimCam);
+    camPitch = Math_Vec3f_Pitch(&eye, &aimCam->at);
+    yaw = Math_Vec3f_Yaw(&origin, &target);
+    pitch = Math_Vec3f_Pitch(&origin, &target);
+
+    *outYaw = camYaw + CLAMP((s16)(yaw - camYaw), -maxDeviation, maxDeviation);
+    *outPitch = CLAMP(camPitch + CLAMP((s16)(pitch - camPitch), -maxDeviation, maxDeviation), -14000, 14000);
+    return 1;
+}
+
+static void Player_ThirdPersonAimConverge(Player* this, PlayState* play, Camera* aimCam) {
+    s16 yaw;
+    s16 pitch;
+
+    // never turn more than ~34 degrees away from the camera direction
+    if (Player_AimConvergeAngles(this, play, aimCam, 0x1800, &yaw, &pitch)) {
+        this->actor.focus.rot.y = yaw;
+        this->actor.focus.rot.x = pitch;
+    }
+}
+
+// SOH [Enhancement] First-person aim assist: how far the shot has to turn away from where the camera looks.
+// In first person the camera follows Link's aim (focus.rot), so the aim itself must stay untouched or the camera
+// would turn with it. The deviation is applied only to the pose of Link's upper body, which is what the arrow
+// and the seed take their direction from. The parallax is small here, so the limit is ~11 degrees.
+static void Player_FirstPersonAimDeviation(Player* this, PlayState* play, s16* yawDev, s16* pitchDev) {
+    // SOH [Enhancement] Horseback: the riding animation moves Link's torso while Epona runs, so the arrow does not
+    // leave exactly along the pose we ask for. Here the deviation is a feedback loop: each frame we compare the
+    // direction the nocked arrow actually points (its world.rot, taken from the bow hand) with the direction that
+    // reaches the point under the reticle, and correct the deviation by the difference.
+    static struct {
+        Actor* arrow;
+        u32 frame;
+        s16 yaw;
+        s16 pitch;
+    } sHorseAimLoop = { NULL, 0, 0, 0 };
+    Camera* aimCam = Play_GetCamera(play, CAM_ID_MAIN);
+    s16 yaw;
+    s16 pitch;
+
+    *yawDev = 0;
+    *pitchDev = 0;
+
+    if (Player_AimConvergeAngles(this, play, aimCam, 0x0800, &yaw, &pitch)) {
+        *yawDev = (s16)(yaw - Camera_GetCamDirYaw(aimCam));
+        *pitchDev = (s16)(pitch - Math_Vec3f_Pitch(&aimCam->eye, &aimCam->at));
+
+        if ((this->stateFlags1 & PLAYER_STATE1_ON_HORSE) && (this->heldActor != NULL) &&
+            (this->heldActor->id == ACTOR_EN_ARROW) &&
+            CVarGetInteger(CVAR_ENHANCEMENT("ThirdPersonAimHorseLoop"), 1)) {
+            Actor* arrow = this->heldActor;
+
+            if ((sHorseAimLoop.arrow == arrow) && ((play->gameplayFrames - sHorseAimLoop.frame) <= 2)) {
+                s16 errYaw = (s16)(yaw - arrow->world.rot.y);
+                s16 errPitch = (s16)(pitch - arrow->world.rot.x);
+
+                *yawDev = CLAMP((s32)sHorseAimLoop.yaw + (s32)(errYaw * 0.8f), -0x2000, 0x2000);
+                *pitchDev = CLAMP((s32)sHorseAimLoop.pitch + (s32)(errPitch * 0.8f), -0x2000, 0x2000);
+            }
+
+            sHorseAimLoop.arrow = arrow;
+            sHorseAimLoop.frame = play->gameplayFrames;
+            sHorseAimLoop.yaw = *yawDev;
+            sHorseAimLoop.pitch = *pitchDev;
+        } else {
+            sHorseAimLoop.arrow = NULL;
+        }
+    } else {
+        sHorseAimLoop.arrow = NULL;
+    }
+}
+// #endregion
+
 /**
  * Sets camera mode for first person, depending on what weapon is held if any.
  * (This causes the "flickering" with action swap with ranged items, as player
@@ -5900,6 +6188,12 @@ s32 func_8083AD4C(PlayState* play, Player* this) {
         }
         // Check if aiming camera mode should be overridden due to player settings
         GameInteractor_Should(VB_CHANGE_AIMING_CAMERA, true, &this->heldItemAction, &camMode);
+        // SOH [Enhancement] Third-person aim: use the "parallel" (Z-target without actor) camera instead.
+        // Only if the current camera setting allows it, otherwise keep the vanilla aiming camera.
+        if (Player_UseThirdPersonAim(this) &&
+            Camera_CheckValidMode(Play_GetCamera(play, CAM_ID_MAIN), CAM_MODE_TARGET) != 0) {
+            camMode = CAM_MODE_TARGET;
+        }
     } else {
         camMode = CAM_MODE_FIRST_PERSON;
     }
@@ -12655,6 +12949,18 @@ s16 func_8084ABD8(PlayState* play, Player* this, s32 arg2, s16 arg3) {
         }
         temp2 = CLAMP(temp2, -3000, 3000);
         this->actor.focus.rot.y += temp2;
+    } else if (Player_UseThirdPersonAim(this)) { // SOH [Enhancement] Third-person aim: aim follows the camera
+        Camera* aimCam = Play_GetCamera(play, CAM_ID_MAIN);
+
+        // focus.rot.x > 0 aims down (vanilla stick-up = aim down). If the aim ends up vertically inverted
+        // in game, drop the minus sign here.
+        this->actor.focus.rot.x = CLAMP(-Camera_GetCamDirPitch(aimCam), -14000, 14000);
+        this->actor.focus.rot.y = Camera_GetCamDirYaw(aimCam);
+
+        // Make the shot land under the reticle instead of parallel to the camera (see the function above).
+        if (CVarGetInteger(CVAR_ENHANCEMENT("ThirdPersonAimParallax"), 1)) {
+            Player_ThirdPersonAimConverge(this, play, aimCam);
+        }
     } else { // First person with weapon
         // Y Axis
         temp1 = (this->stateFlags1 & PLAYER_STATE1_ON_HORSE) ? 3500 : 14000;
@@ -12703,7 +13009,24 @@ s16 func_8084ABD8(PlayState* play, Player* this, s32 arg2, s16 arg3) {
     }
 
     this->unk_6AE_rotFlags |= UNK6AE_ROT_FOCUS_Y;
-    return func_80836AB8(this, (play->shootingGalleryStatus != 0) || func_8002DD78(this) || func_808334B4(this)) - arg3;
+
+    {
+        s32 poseFromFocus = (play->shootingGalleryStatus != 0) || func_8002DD78(this) || func_808334B4(this);
+        s16 aimYaw = func_80836AB8(this, poseFromFocus);
+
+        // SOH [Enhancement] First-person aim assist (shooting gallery, bow on horseback): shot lands under the reticle
+        if (poseFromFocus && (arg2 != 0) && Player_UseFirstPersonAimAssist(this) &&
+            CVarGetInteger(CVAR_ENHANCEMENT("ThirdPersonAimParallax"), 1)) {
+            s16 yawDev;
+            s16 pitchDev;
+
+            Player_FirstPersonAimDeviation(this, play, &yawDev, &pitchDev);
+            this->upperLimbRot.x += pitchDev;
+            aimYaw += yawDev;
+        }
+
+        return aimYaw - arg3;
+    }
 }
 
 void func_8084AEEC(Player* this, f32* arg1, f32 arg2, s16 arg3) {
@@ -12824,12 +13147,80 @@ void func_8084B158(PlayState* play, Player* this, Input* input, f32 arg3) {
     LinkAnimation_Update(play, &this->skelAnime);
 }
 
+// SOH [Enhancement] Third-person aim: Link can walk while aiming. He always faces where the camera points
+// (see func_8084ABD8) and moves relative to the camera with the left stick, using the bow side-walk animation.
+static void Player_ThirdPersonAimMove(Player* this, PlayState* play) {
+    f32 speedTarget;
+    s16 yawTarget;
+    LinkAnimationHeader* walkAnim = func_8083356C(this);
+    s32 hasStickInput;
+    s32 savedAimMode = this->unk_6AD;
+
+    // Player_CalcSpeedAndYawFromControlStick forces speed 0 whenever unk_6AD != 0 (any item-aiming state),
+    // so read the stick as if Link was not aiming, then restore the state.
+    this->unk_6AD = 0;
+    hasStickInput = Player_GetMovementSpeedAndYaw(this, &speedTarget, &yawTarget, SPEED_MODE_LINEAR, play);
+    this->unk_6AD = savedAimMode;
+
+    if (hasStickInput) {
+        speedTarget *= CVarGetFloat(CVAR_ENHANCEMENT("ThirdPersonAimSpeed"), 0.5f);
+        Math_StepToF(&this->linearVelocity, speedTarget, 1.5f);
+        this->yaw = yawTarget;
+
+        if (this->skelAnime.animation != walkAnim) {
+            Player_AnimPlayLoop(play, this, walkAnim);
+        }
+    } else {
+        // Keep sliding in the last direction while slowing down, then face forward again
+        if (Player_DecelerateToZero(this)) {
+            this->yaw = this->actor.shape.rot.y;
+
+            if (this->skelAnime.animation == walkAnim) {
+                Player_AnimPlayLoop(play, this, Player_GetIdleAnim(this));
+            }
+        }
+    }
+
+    // The first-person action never advances `skelAnime` by itself, which left the legs frozen. While walking
+    // (or still sliding to a stop) advance the side-walk animation like Player_Action_80840DE4 does, with the
+    // playback speed following Link's speed.
+    if (this->skelAnime.animation == walkAnim) {
+        f32 frames;
+        f32 coeff;
+        s32 direction;
+
+        if (walkAnim == &gPlayerAnim_link_bow_side_walk) {
+            frames = 24.0f;
+            coeff = -1.0f;
+        } else {
+            frames = 29.0f;
+            coeff = 1.0f;
+        }
+
+        this->skelAnime.mode = 0;
+        LinkAnimation_SetUpdateFunction(&this->skelAnime);
+        this->skelAnime.animLength = frames;
+        this->skelAnime.endFrame = frames - 1.0f;
+
+        direction = ((s16)(this->yaw - this->actor.shape.rot.y) >= 0) ? 1 : -1;
+        this->skelAnime.playSpeed = direction * (this->linearVelocity * coeff);
+
+        LinkAnimation_Update(play, &this->skelAnime);
+
+        if (LinkAnimation_OnFrame(&this->skelAnime, 0.0f) || LinkAnimation_OnFrame(&this->skelAnime, frames * 0.5f)) {
+            Player_PlaySteppingSfx(this, this->linearVelocity);
+        }
+    }
+}
+
 void Player_Action_8084B1D8(Player* this, PlayState* play) {
     if (this->stateFlags1 & PLAYER_STATE1_IN_WATER) {
         func_8084B000(this);
         if (GameInteractor_Should(VB_PLAYER_FIRST_PERSON_DECELERATE, true, this)) {
             func_8084AEEC(this, &this->linearVelocity, 0, this->actor.shape.rot.y);
         }
+    } else if (Player_UseThirdPersonAim(this) && (this->unk_6AD == 2)) {
+        Player_ThirdPersonAimMove(this, play);
     } else if (GameInteractor_Should(VB_PLAYER_FIRST_PERSON_DECELERATE, true, this)) {
         Player_DecelerateToZero(this);
     }
@@ -12858,7 +13249,9 @@ void Player_Action_8084B1D8(Player* this, PlayState* play) {
         }
     }
 
-    if (GameInteractor_Should(VB_PLAYER_FIRST_PERSON_ALIGN_YAW, true, this)) {
+    // SOH [Enhancement] Third-person aim keeps its own movement direction in `yaw` (set by Player_ThirdPersonAimMove)
+    if (!(Player_UseThirdPersonAim(this) && (this->unk_6AD == 2)) &&
+        GameInteractor_Should(VB_PLAYER_FIRST_PERSON_ALIGN_YAW, true, this)) {
         this->yaw = this->actor.shape.rot.y;
     }
 }

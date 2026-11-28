@@ -2160,6 +2160,76 @@ void SohMenu::AddMenuEnhancements() {
         .HideInSearch(true)
         .Options(WindowButtonOptions().Tooltip("Enables the separate Gameplay Stats Window."));
 
+    // Addon Gameplay
+    path.sidebarName = "Addon Gameplay";
+    AddSidebarEntry("Enhancements", path.sidebarName, 2);
+    path.column = SECTION_COLUMN_1;
+    AddWidget(path, "Third Person Aim", WIDGET_SEPARATOR_TEXT);
+    AddWidget(path, "Third Person Aim", WIDGET_CVAR_CHECKBOX)
+        .CVar(CVAR_ENHANCEMENT("ThirdPersonAim"))
+        .RaceDisable(false)
+        .Options(CheckboxOptions().DefaultValue(true).Tooltip("While aiming the slingshot or bow, the camera moves over Link's shoulder, Link walks while aiming, and the shot lands under the reticle."));
+    AddWidget(path, "Aim Reticle", WIDGET_CVAR_CHECKBOX)
+        .CVar(CVAR_ENHANCEMENT("ThirdPersonAimReticle"))
+        .RaceDisable(false)
+        .PreFunc([](WidgetInfo& info) { info.isHidden = !CVarGetInteger(CVAR_ENHANCEMENT("ThirdPersonAim"), 1); })
+        .Options(CheckboxOptions().DefaultValue(true).Tooltip("Draws a ring with a dot at the center of the screen while aiming."));
+    AddWidget(path, "Show Ammo Next To Reticle", WIDGET_CVAR_CHECKBOX)
+        .CVar(CVAR_ENHANCEMENT("ThirdPersonAimAmmo"))
+        .RaceDisable(false)
+        .PreFunc([](WidgetInfo& info) { info.isHidden = !CVarGetInteger(CVAR_ENHANCEMENT("ThirdPersonAim"), 1); })
+        .Options(CheckboxOptions().DefaultValue(true).Tooltip("Shows the remaining ammo (and the score in the shooting gallery) next to the reticle."));
+    AddWidget(path, "Shot Lands Under Reticle", WIDGET_CVAR_CHECKBOX)
+        .CVar(CVAR_ENHANCEMENT("ThirdPersonAimParallax"))
+        .RaceDisable(false)
+        .PreFunc([](WidgetInfo& info) { info.isHidden = !CVarGetInteger(CVAR_ENHANCEMENT("ThirdPersonAim"), 1); })
+        .Options(CheckboxOptions().DefaultValue(true).Tooltip("Corrects the shot so it lands under the reticle instead of parallel to the camera."));
+    AddWidget(path, "First-Person Aim Assist", WIDGET_CVAR_CHECKBOX)
+        .CVar(CVAR_ENHANCEMENT("ThirdPersonAimFirstPerson"))
+        .RaceDisable(false)
+        .PreFunc([](WidgetInfo& info) { info.isHidden = !CVarGetInteger(CVAR_ENHANCEMENT("ThirdPersonAim"), 1); })
+        .Options(CheckboxOptions().DefaultValue(true).Tooltip("Applies the same correction to first-person aiming (shooting gallery, bow on horseback)."));
+    AddWidget(path, "Third Person Aim In Shooting Gallery", WIDGET_CVAR_CHECKBOX)
+        .CVar(CVAR_ENHANCEMENT("ThirdPersonAimGallery"))
+        .RaceDisable(false)
+        .PreFunc([](WidgetInfo& info) { info.isHidden = !CVarGetInteger(CVAR_ENHANCEMENT("ThirdPersonAim"), 1); })
+        .Options(CheckboxOptions().DefaultValue(false).Tooltip("Uses third-person aim in the shooting gallery too. Off by default because the gallery room forces a fixed camera."));
+    AddWidget(path, "Third Person Aim On Horseback", WIDGET_CVAR_CHECKBOX)
+        .CVar(CVAR_ENHANCEMENT("ThirdPersonAimHorseLoop"))
+        .RaceDisable(false)
+        .PreFunc([](WidgetInfo& info) { info.isHidden = !CVarGetInteger(CVAR_ENHANCEMENT("ThirdPersonAim"), 1); })
+        .Options(CheckboxOptions().DefaultValue(true).Tooltip("Allows third-person aim while riding."));
+    AddWidget(path, "Aim Walk Speed", WIDGET_CVAR_SLIDER_FLOAT)
+        .CVar(CVAR_ENHANCEMENT("ThirdPersonAimSpeed"))
+        .RaceDisable(false)
+        .PreFunc([](WidgetInfo& info) { info.isHidden = !CVarGetInteger(CVAR_ENHANCEMENT("ThirdPersonAim"), 1); })
+        .Options(FloatSliderOptions().Min(0.1f).Max(1.0f).DefaultValue(0.5f).Step(0.05f).Format("%.2f").Tooltip("How fast Link walks while aiming, relative to normal."));
+    AddWidget(path, "Camera Zoom", WIDGET_CVAR_SLIDER_FLOAT)
+        .CVar(CVAR_ENHANCEMENT("ThirdPersonAimZoom"))
+        .RaceDisable(false)
+        .PreFunc([](WidgetInfo& info) { info.isHidden = !CVarGetInteger(CVAR_ENHANCEMENT("ThirdPersonAim"), 1); })
+        .Options(FloatSliderOptions().Min(0.3f).Max(1.0f).DefaultValue(0.6f).Step(0.05f).Format("%.2f").Tooltip("Camera distance while aiming, relative to normal (lower is closer)."));
+    AddWidget(path, "Shoulder Offset", WIDGET_CVAR_SLIDER_FLOAT)
+        .CVar(CVAR_ENHANCEMENT("ThirdPersonAimShoulder"))
+        .RaceDisable(false)
+        .PreFunc([](WidgetInfo& info) { info.isHidden = !CVarGetInteger(CVAR_ENHANCEMENT("ThirdPersonAim"), 1); })
+        .Options(FloatSliderOptions().Min(0.0f).Max(0.8f).DefaultValue(0.35f).Step(0.05f).Format("%.2f").Tooltip("How far the camera shifts to Link's left while aiming."));
+    AddWidget(path, "Aim Field Of View", WIDGET_CVAR_SLIDER_FLOAT)
+        .CVar(CVAR_ENHANCEMENT("ThirdPersonAimFov"))
+        .RaceDisable(false)
+        .PreFunc([](WidgetInfo& info) { info.isHidden = !CVarGetInteger(CVAR_ENHANCEMENT("ThirdPersonAim"), 1); })
+        .Options(FloatSliderOptions().Min(40.0f).Max(80.0f).DefaultValue(60.0f).Step(1.0f).Format("%.0f").Tooltip("Field of view while aiming."));
+    AddWidget(path, "Reticle Size", WIDGET_CVAR_SLIDER_FLOAT)
+        .CVar(CVAR_ENHANCEMENT("ThirdPersonAimReticleSize"))
+        .RaceDisable(false)
+        .PreFunc([](WidgetInfo& info) { info.isHidden = !CVarGetInteger(CVAR_ENHANCEMENT("ThirdPersonAim"), 1); })
+        .Options(FloatSliderOptions().Min(0.5f).Max(3.0f).DefaultValue(1.6f).Step(0.1f).Format("%.1f").Tooltip("Size of the reticle."));
+    AddWidget(path, "Reticle Opacity", WIDGET_CVAR_SLIDER_FLOAT)
+        .CVar(CVAR_ENHANCEMENT("ThirdPersonAimReticleOpacity"))
+        .RaceDisable(false)
+        .PreFunc([](WidgetInfo& info) { info.isHidden = !CVarGetInteger(CVAR_ENHANCEMENT("ThirdPersonAim"), 1); })
+        .Options(FloatSliderOptions().Min(0.2f).Max(1.0f).DefaultValue(0.9f).Step(0.05f).Format("%.2f").Tooltip("Opacity of the reticle."));
+
     // Time Splits
     path.sidebarName = "Time Splits";
     AddSidebarEntry("Enhancements", path.sidebarName, 1);

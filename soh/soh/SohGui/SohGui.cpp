@@ -20,6 +20,7 @@
 #include "soh/Enhancements/debugger/MessageViewer.h"
 #include "soh/Notification/Notification.h"
 #include "soh/Enhancements/TimeDisplay/TimeDisplay.h"
+#include "soh/Enhancements/ThirdPersonAim/ThirdPersonAimReticle.h"
 #include "soh/Enhancements/mod_menu.h"
 #include "soh/Network/Anchor/Anchor.h"
 #include "soh/Enhancements/audio/AudioEditor.h"
@@ -112,6 +113,40 @@ std::shared_ptr<Notification::Window> mNotificationWindow;
 std::shared_ptr<TimeDisplayWindow> mTimeDisplayWindow;
 std::shared_ptr<AnchorRoomWindow> mAnchorRoomWindow;
 
+// Invisible, always-running window: Draw() never calls ImGui::Begin, so there is no frame or title bar. It only exists
+// so the third-person aim reticle is drawn every frame through the foreground draw list.
+class ThirdPersonAimReticleWindow final : public Ship::GuiWindow {
+  public:
+    using Ship::GuiWindow::GuiWindow;
+    void Draw() override {
+        DrawElement();
+    }
+    void InitElement() override {
+    }
+    void UpdateElement() override {
+    }
+    void DrawElement() override {
+        const bool enabled = CVarGetInteger(CVAR_ENHANCEMENT("ThirdPersonAim"), 1) != 0 &&
+                             CVarGetInteger(CVAR_ENHANCEMENT("ThirdPersonAimReticle"), 1) != 0;
+        const bool menuOpen = mSohMenu != nullptr && mSohMenu->IsVisible();
+        const bool aiming = enabled && !menuOpen && Player_IsThirdPersonAiming() != 0;
+        int ammo = -1;
+        int score = -1;
+        int scoreKind = 0;
+        if (aiming && CVarGetInteger(CVAR_ENHANCEMENT("ThirdPersonAimAmmo"), 1) != 0) {
+            ammo = Player_GetThirdPersonAimAmmo();
+            if (ammo >= 0) {
+                score = Player_GetThirdPersonAimScore(&scoreKind);
+            }
+        }
+        ThirdPersonAimReticle_Draw(aiming, CVarGetFloat(CVAR_ENHANCEMENT("ThirdPersonAimReticleSize"), 1.6f),
+                                   CVarGetFloat(CVAR_ENHANCEMENT("ThirdPersonAimReticleOpacity"), 0.9f), ammo, score,
+                                   scoreKind);
+    }
+};
+
+std::shared_ptr<ThirdPersonAimReticleWindow> mThirdPersonAimReticleWindow;
+
 UIWidgets::Colors GetMenuThemeColor() {
     return mSohMenu->GetMenuThemeColor();
 }
@@ -153,6 +188,7 @@ std::vector<std::shared_ptr<Ship::GuiWindow>> GetAllGuiWindows() {
         mNotificationWindow,
         mTimeDisplayWindow,
         mAnchorRoomWindow,
+        mThirdPersonAimReticleWindow,
         // Registered outside SohGui.
         gui->GetGuiWindow("Configure Controller"),
         gui->GetGuiWindow("Console"),
@@ -270,6 +306,10 @@ void SetupGuiElements() {
     gui->AddGuiWindow(mTimeDisplayWindow);
     mAnchorRoomWindow = std::make_shared<AnchorRoomWindow>(CVAR_WINDOW("AnchorRoom"), "Anchor Room");
     gui->AddGuiWindow(mAnchorRoomWindow);
+    mThirdPersonAimReticleWindow = std::make_shared<ThirdPersonAimReticleWindow>(CVAR_WINDOW("ThirdPersonAimReticle"),
+                                                                                 "Third Person Aim Reticle");
+    gui->AddGuiWindow(mThirdPersonAimReticleWindow);
+    mThirdPersonAimReticleWindow->Show();
 }
 
 void Destroy() {
@@ -307,6 +347,7 @@ void Destroy() {
     mPlandomizerWindow = nullptr;
     mTimeDisplayWindow = nullptr;
     mAnchorRoomWindow = nullptr;
+    mThirdPersonAimReticleWindow = nullptr;
 }
 
 void RegisterPopup(std::string title, std::string message, std::string button1, std::string button2,
